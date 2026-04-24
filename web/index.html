@@ -1,0 +1,159 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICO 生成器</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">ICO 生成器 v1.0.0</h1>
+
+        <!-- 工具栏 -->
+        <div class="toolbar">
+            <button class="btn btn-primary" id="btnAddImage">
+                <span class="icon">🖼️</span> 添加图像
+            </button>
+            <button class="btn btn-secondary" id="btnAddFolder">
+                <span class="icon">📁</span> 添加目录
+            </button>
+            <button class="btn btn-danger" id="btnClearAll">
+                <span class="icon">🗑️</span> 全部清除
+            </button>
+            <span class="image-count">已添加 <span id="imageCount">0</span> 张图像</span>
+        </div>
+
+        <!-- 拖放区域 -->
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-zone-content">
+                <div class="drop-icon">📥</div>
+                <p class="drop-text">拖放图像到此处，或单击添加。</p>
+            </div>
+            <div class="image-preview-list" id="imagePreviewList"></div>
+        </div>
+
+        <!-- 预设尺寸选择 -->
+        <div class="section">
+            <label class="section-label">选择预设尺寸（可多选）：</label>
+            <div class="size-actions">
+                <button class="btn btn-small" id="btnSelectAll">✓ 全选尺寸</button>
+                <button class="btn btn-small" id="btnDeselectAll">✕ 取消全选</button>
+            </div>
+            <div class="size-grid" id="sizeGrid">
+                <label class="size-checkbox">
+                    <input type="checkbox" value="16" checked>
+                    <span class="checkmark">16×16</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="24" checked>
+                    <span class="checkmark">24×24</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="32" checked>
+                    <span class="checkmark">32×32</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="48" checked>
+                    <span class="checkmark">48×48</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="64">
+                    <span class="checkmark">64×64</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="72">
+                    <span class="checkmark">72×72</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="96">
+                    <span class="checkmark">96×96</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="128">
+                    <span class="checkmark">128×128</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="256" checked>
+                    <span class="checkmark">256×256</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="512">
+                    <span class="checkmark">512×512</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="768">
+                    <span class="checkmark">768×768</span>
+                </label>
+                <label class="size-checkbox">
+                    <input type="checkbox" value="1024">
+                    <span class="checkmark">1024×1024</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- 自定义尺寸和颜色模式 -->
+        <div class="section row-section">
+            <div class="row-item">
+                <label class="section-label">自定义尺寸（可选）：</label>
+                <input type="text" class="custom-size-input" id="customSizes" placeholder="例如: 48,96,192">
+            </div>
+            <div class="row-item">
+                <label class="section-label">颜色模式：</label>
+                <select class="color-mode-select" id="colorMode">
+                    <option value="rgba">RGB/Alpha (32位，带透明)</option>
+                    <option value="rgb">RGB (24位，无透明)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 底部按钮 -->
+        <div class="bottom-actions">
+            <button class="btn btn-info" id="btnAbout">
+                <span class="icon">ℹ️</span> 关于
+            </button>
+            <button class="btn btn-warning" id="btnPackageZip" disabled>
+                <span class="icon">📦</span> 打包 ZIP
+            </button>
+            <button class="btn btn-success" id="btnGenerateIco" disabled>
+                <span class="icon">✨</span> 生成 ICO
+            </button>
+        </div>
+    </div>
+
+    <!-- 关于对话框 -->
+    <div class="modal" id="aboutModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>关于</h3>
+                <button class="modal-close" id="btnCloseAbout">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h2>ICO 生成器 v1.0.0</h2>
+                <p>一个简单易用的 ICO 图标生成工具。</p>
+                <p>支持多种预设尺寸和自定义尺寸，可批量生成 ICO 文件。</p>
+                <p>技术栈：Python + pywebview + PIL</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结果对话框 -->
+    <div class="modal" id="resultModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>生成完成</h3>
+                <button class="modal-close" id="btnCloseResult">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="resultContent"></div>
+                <div class="result-actions">
+                    <button class="btn btn-primary" id="btnSaveIco">保存 ICO 文件</button>
+                    <button class="btn btn-secondary" id="btnDownloadZip">下载 ZIP 包</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
