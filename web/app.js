@@ -25,10 +25,26 @@ const customSizes = document.getElementById('customSizes');
 const colorMode = document.getElementById('colorMode');
 
 // 初始化
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     bindEvents();
+    await syncState();
     updateUI();
 });
+
+// 同步前后端状态
+async function syncState() {
+    if (window.pywebview) {
+        try {
+            const result = await window.pywebview.api.get_images();
+            if (result.success) {
+                uploadedImages = result.images;
+                updateImagePreview();
+            }
+        } catch (error) {
+            console.error('同步状态失败:', error);
+        }
+    }
+}
 
 // 绑定事件
 function bindEvents() {
@@ -135,28 +151,32 @@ function updateImagePreview() {
     uploadedImages.forEach((img, index) => {
         const item = document.createElement('div');
         item.className = 'image-preview-item';
+        item.dataset.index = index;
         item.innerHTML = `
             <img src="${img.preview}" alt="${img.name}">
-            <button class="remove-btn" data-index="${index}">&times;</button>
+            <button class="remove-btn">&times;</button>
             <div class="file-name">${img.name}</div>
         `;
         imagePreviewList.appendChild(item);
     });
+}
 
-    // 绑定删除按钮事件
-    document.querySelectorAll('.remove-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const index = parseInt(btn.dataset.index);
+// 删除图片（使用事件委托）
+imagePreviewList.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('remove-btn')) {
+        const item = e.target.closest('.image-preview-item');
+        const index = parseInt(item.dataset.index);
+        
+        if (!isNaN(index) && index >= 0 && index < uploadedImages.length) {
             if (window.pywebview) {
                 await window.pywebview.api.remove_image(index);
             }
             uploadedImages.splice(index, 1);
             updateImagePreview();
             updateUI();
-        });
-    });
-}
+        }
+    }
+});
 
 // 更新 UI 状态
 function updateUI() {
@@ -167,24 +187,41 @@ function updateUI() {
 
 // 处理拖放的文件
 function handleDroppedFiles(files) {
-    const images = [];
-    for (const file of files) {
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                images.push({
-                    id: uploadedImages.length + images.length,
-                    name: file.name,
-                    preview: e.target.result,
-                    path: file.name
-                });
-                if (images.length === files.length) {
-                    addImagesToPreview(images);
-                }
-            };
-            reader.readAsDataURL(file);
-        }
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+        showNotification('没有找到有效的图片文件', 'warning');
+        return;
     }
+    
+    let loadedCount = 0;
+    const startId = uploadedImages.length;
+    const images = new Array(imageFiles.length);
+    
+    imageFiles.forEach((file, idx) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            images[idx] = {
+                id: startId + idx,
+                name: file.name,
+                preview: e.target.result,
+                path: file.name
+            };
+            loadedCount++;
+            if (loadedCount === imageFiles.length) {
+                addImagesToPreview(images.filter(Boolean));
+            }
+        };
+        reader.onerror = () => {
+            loadedCount++;
+            if (loadedCount === imageFiles.length) {
+                const validImages = images.filter(Boolean);
+                if (validImages.length > 0) {
+                    addImagesToPreview(validImages);
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 // 获取选中的尺寸

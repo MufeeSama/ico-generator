@@ -8,12 +8,21 @@ from PIL import Image
 import zipfile
 import tempfile
 import shutil
+import atexit
 
 
 class Api:
     def __init__(self):
         self.temp_dir = tempfile.mkdtemp()
         self.uploaded_images = []
+        atexit.register(self._cleanup_on_exit)
+
+    def _cleanup_on_exit(self):
+        """程序退出时自动清理临时文件"""
+        try:
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
+        except:
+            pass
 
     def select_images(self):
         """打开文件对话框选择图片"""
@@ -24,8 +33,9 @@ class Api:
         )
         if result:
             images = []
-            for path in result:
-                img_info = self._process_image(path)
+            start_id = len(self.uploaded_images)
+            for i, path in enumerate(result):
+                img_info = self._process_image(path, start_id + i)
                 if img_info:
                     images.append(img_info)
             self.uploaded_images.extend(images)
@@ -38,28 +48,31 @@ class Api:
         if result and len(result) > 0:
             folder_path = result[0]
             images = []
-            for filename in os.listdir(folder_path):
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+            start_id = len(self.uploaded_images)
+            valid_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif')
+            for i, filename in enumerate(os.listdir(folder_path)):
+                if filename.lower().endswith(valid_extensions):
                     path = os.path.join(folder_path, filename)
-                    img_info = self._process_image(path)
+                    img_info = self._process_image(path, start_id + len(images))
                     if img_info:
                         images.append(img_info)
             self.uploaded_images.extend(images)
             return {'success': True, 'images': images, 'total': len(self.uploaded_images)}
         return {'success': False, 'message': '未选择文件夹'}
 
-    def _process_image(self, path):
+    def _process_image(self, path, img_id=None):
         """处理图片文件，返回图片信息"""
+        if img_id is None:
+            img_id = len(self.uploaded_images)
         try:
             with Image.open(path) as img:
-                # 生成缩略图预览
                 img.thumbnail((100, 100))
                 buffered = BytesIO()
                 img.save(buffered, format="PNG")
                 img_str = base64.b64encode(buffered.getvalue()).decode()
 
                 return {
-                    'id': len(self.uploaded_images),
+                    'id': img_id,
                     'path': path,
                     'name': os.path.basename(path),
                     'preview': f'data:image/png;base64,{img_str}'
@@ -72,6 +85,10 @@ class Api:
         """清除所有已添加的图片"""
         self.uploaded_images = []
         return {'success': True}
+
+    def get_images(self):
+        """获取当前已添加的图片列表（用于前后端状态同步）"""
+        return {'success': True, 'images': self.uploaded_images, 'total': len(self.uploaded_images)}
 
     def remove_image(self, index):
         """移除指定索引的图片"""
@@ -212,46 +229,37 @@ class Api:
             return {'success': False, 'message': '请先添加图片'}
 
         try:
-            # 解析尺寸列表
             size_list = [int(s) for s in sizes if s]
             if not size_list:
                 return {'success': False, 'message': '请选择至少一个尺寸'}
 
             results = []
             for img_info in self.uploaded_images:
-                # 打开原始图像
-                img = Image.open(img_info['path'])
-
-                # 转换为RGBA模式
-                if img.mode != 'RGBA':
-                    img = img.convert('RGBA')
-
-                # 准备不同尺寸的图标 - 必须从大到小排序
+                img = None
                 icon_images = []
-                for size in sorted(size_list, reverse=True):
-                    resized = img.resize((size, size), Image.Resampling.LANCZOS)
-                    if color_mode == 'rgb':
-                        # 转换为RGB模式（无透明）
-                        resized = resized.convert('RGB')
-                    icon_images.append(resized)
+                try:
+                    with Image.open(img_info['path']) as img:
+                        if img.mode != 'RGBA':
+                            img = img.convert('RGBA')
+                        
+                        for size in sorted(size_list, reverse=True):
+                            resized = img.resize((size, size), Image.Resampling.LANCZOS)
+                            if color_mode == 'rgb':
+                                resized = resized.convert('RGB')
+                            icon_images.append(resized)
 
-                # 保存ICO文件
-                output_name = os.path.splitext(img_info['name'])[0] + '.ico'
-                output_path = os.path.join(self.temp_dir, output_name)
+                        output_name = os.path.splitext(img_info['name'])[0] + '.ico'
+                        output_path = os.path.join(self.temp_dir, output_name)
+                        self._create_bmp_ico(icon_images, output_path)
 
-                # 使用手动构建的BMP格式ICO
-                self._create_bmp_ico(icon_images, output_path)
-
-                # 清理图像对象
-                for icon_img in icon_images:
-                    icon_img.close()
-                img.close()
-
-                results.append({
-                    'name': output_name,
-                    'path': output_path,
-                    'sizes': sorted(size_list, reverse=True)
-                })
+                        results.append({
+                            'name': output_name,
+                            'path': output_path,
+                            'sizes': sorted(size_list, reverse=True)
+                        })
+                finally:
+                    for icon_img in icon_images:
+                        icon_img.close()
 
             return {'success': True, 'files': results}
         except Exception as e:
