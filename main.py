@@ -330,7 +330,7 @@ def main():
     api = Api()
 
     # 获取HTML文件路径
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web', 'index.html')
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs', 'index.html')
 
     # 计算居中位置
     window_width = 960
