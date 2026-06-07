@@ -15,7 +15,22 @@ class Api:
     def __init__(self):
         self.temp_dir = tempfile.mkdtemp()
         self.uploaded_images = []
+        self._window = None  # 私有属性，避免 COM 错误
         atexit.register(self._cleanup_on_exit)
+
+    def set_window(self, window):
+        """设置窗口引用"""
+        self._window = window
+
+    def minimize_window(self):
+        """最小化窗口"""
+        if self._window:
+            self._window.minimize()
+
+    def close_window(self):
+        """关闭窗口"""
+        if self._window:
+            self._window.destroy()
 
     def _cleanup_on_exit(self):
         """程序退出时自动清理临时文件"""
@@ -333,11 +348,11 @@ def main():
     html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web', 'index.html')
 
     # 计算居中位置
-    window_width = 960
-    window_height = 760
+    window_width = 1200
+    window_height = 800
     x, y = get_center_position(window_width, window_height)
 
-    # 创建窗口
+    # 创建窗口（无边框模式）
     window = webview.create_window(
         'ICO 生成器',
         html_path,
@@ -346,8 +361,11 @@ def main():
         height=window_height,
         x=x,
         y=y,
-        resizable=False
+        resizable=False,
+        frameless=True,
+        easy_drag=True
     )
+    api.set_window(window)
 
     # 启动应用
     webview.start(debug=False)

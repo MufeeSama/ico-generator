@@ -1,8 +1,24 @@
-// 全局状态
+// ICO Generator - JavaScript
+// All emoji icons replaced with SVG for professional UI
+
+// SVG Icon Templates (Lucide style)
+const icons = {
+    image: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+    folder: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    trash: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+    download: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    package: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>',
+    sparkles: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    loader: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>',
+    target: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+    close: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+};
+
+// Global state
 let uploadedImages = [];
 let generatedFiles = [];
 
-// DOM 元素
+// DOM elements
 const dropZone = document.getElementById('dropZone');
 const imagePreviewList = document.getElementById('imagePreviewList');
 const imageCount = document.getElementById('imageCount');
@@ -24,15 +40,15 @@ const resultContent = document.getElementById('resultContent');
 const customSizes = document.getElementById('customSizes');
 const colorMode = document.getElementById('colorMode');
 
-// 初始化
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
     updateUI();
 });
 
-// 绑定事件
+// Bind events
 function bindEvents() {
-    // 添加图像按钮
+    // Add image button
     btnAddImage.addEventListener('click', () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -44,7 +60,7 @@ function bindEvents() {
         input.click();
     });
 
-    // 添加目录按钮
+    // Add folder button
     btnAddFolder.addEventListener('click', () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -56,15 +72,21 @@ function bindEvents() {
         input.click();
     });
 
-    // 清除全部按钮
+    // Clear all button
     btnClearAll.addEventListener('click', () => {
         uploadedImages = [];
         updateImagePreview();
         updateUI();
     });
 
-    // 拖放事件
+    // Drop zone events
     dropZone.addEventListener('click', () => btnAddImage.click());
+    dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            btnAddImage.click();
+        }
+    });
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         dropZone.classList.add('drag-over');
@@ -78,7 +100,7 @@ function bindEvents() {
         handleDroppedFiles(e.dataTransfer.files);
     });
 
-    // 全选/取消全选
+    // Select all / deselect all
     btnSelectAll.addEventListener('click', () => {
         document.querySelectorAll('.size-checkbox input').forEach(cb => cb.checked = true);
     });
@@ -86,38 +108,67 @@ function bindEvents() {
         document.querySelectorAll('.size-checkbox input').forEach(cb => cb.checked = false);
     });
 
-    // 生成 ICO
+    // Generate ICO
     btnGenerateIco.addEventListener('click', generateIco);
 
-    // 打包 ZIP
+    // Package ZIP
     btnPackageZip.addEventListener('click', packageZip);
 
-    // 关于对话框
-    btnAbout.addEventListener('click', () => aboutModal.classList.add('show'));
-    btnCloseAbout.addEventListener('click', () => aboutModal.classList.remove('show'));
+    // About modal
+    btnAbout.addEventListener('click', () => {
+        aboutModal.classList.add('show');
+        btnCloseAbout.focus();
+    });
+    btnCloseAbout.addEventListener('click', () => {
+        aboutModal.classList.remove('show');
+        btnAbout.focus();
+    });
 
-    // 结果对话框
-    btnCloseResult.addEventListener('click', () => resultModal.classList.remove('show'));
+    // Result modal
+    btnCloseResult.addEventListener('click', () => {
+        resultModal.classList.remove('show');
+        btnGenerateIco.focus();
+    });
     btnSaveIco.addEventListener('click', saveIcoFiles);
     btnDownloadZip.addEventListener('click', downloadZip);
 
-    // 点击模态框外部关闭
+    // Click modal backdrop to close
     aboutModal.addEventListener('click', (e) => {
-        if (e.target === aboutModal) aboutModal.classList.remove('show');
+        if (e.target === aboutModal) {
+            aboutModal.classList.remove('show');
+            btnAbout.focus();
+        }
     });
     resultModal.addEventListener('click', (e) => {
-        if (e.target === resultModal) resultModal.classList.remove('show');
+        if (e.target === resultModal) {
+            resultModal.classList.remove('show');
+            btnGenerateIco.focus();
+        }
+    });
+
+    // Escape key to close modals
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (aboutModal.classList.contains('show')) {
+                aboutModal.classList.remove('show');
+                btnAbout.focus();
+            }
+            if (resultModal.classList.contains('show')) {
+                resultModal.classList.remove('show');
+                btnGenerateIco.focus();
+            }
+        }
     });
 }
 
-// 添加图片到预览
+// Add images to preview
 function addImagesToPreview(images) {
     uploadedImages = uploadedImages.concat(images);
     updateImagePreview();
     updateUI();
 }
 
-// 更新图片预览
+// Update image preview
 function updateImagePreview() {
     imagePreviewList.innerHTML = '';
 
@@ -132,18 +183,19 @@ function updateImagePreview() {
         const item = document.createElement('div');
         item.className = 'image-preview-item';
         item.dataset.index = index;
+        item.setAttribute('role', 'listitem');
         item.innerHTML = `
             <img src="${img.preview}" alt="${img.name}">
-            <button class="remove-btn">&times;</button>
+            <button class="remove-btn" aria-label="移除图像 ${img.name}">${icons.close}</button>
             <div class="file-name">${img.name}</div>
         `;
         imagePreviewList.appendChild(item);
     });
 }
 
-// 删除图片（使用事件委托）
+// Delete image (event delegation)
 imagePreviewList.addEventListener('click', (e) => {
-    if (e.target.classList.contains('remove-btn')) {
+    if (e.target.closest('.remove-btn')) {
         const item = e.target.closest('.image-preview-item');
         const index = parseInt(item.dataset.index);
         
@@ -155,14 +207,14 @@ imagePreviewList.addEventListener('click', (e) => {
     }
 });
 
-// 更新 UI 状态
+// Update UI state
 function updateUI() {
     imageCount.textContent = uploadedImages.length;
     btnGenerateIco.disabled = uploadedImages.length === 0;
     btnPackageZip.disabled = uploadedImages.length === 0 || generatedFiles.length === 0;
 }
 
-// 处理拖放的文件
+// Handle dropped files
 function handleDroppedFiles(files) {
     const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
     if (imageFiles.length === 0) {
@@ -201,35 +253,35 @@ function handleDroppedFiles(files) {
     });
 }
 
-// 获取选中的尺寸
+// Get selected sizes
 function getSelectedSizes() {
     const sizes = [];
     document.querySelectorAll('.size-checkbox input:checked').forEach(cb => {
         sizes.push(parseInt(cb.value));
     });
 
-    // 添加自定义尺寸
+    // Add custom sizes
     const custom = customSizes.value.trim();
     if (custom) {
         const customList = custom.split(',').map(s => parseInt(s.trim())).filter(s => s && !isNaN(s));
         sizes.push(...customList);
     }
 
-    return [...new Set(sizes)]; // 去重
+    return [...new Set(sizes)]; // Deduplicate
 }
 
-// 将图片缩放到指定尺寸
+// Resize image to specified size
 function resizeImage(img, size) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
     
-    // 使用高质量缩放
+    // High quality scaling
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     
-    // 绘制图片（保持比例，居中裁剪）
+    // Draw image (keep ratio, center crop)
     const scale = Math.max(size / img.width, size / img.height);
     const x = (size - img.width * scale) / 2;
     const y = (size - img.height * scale) / 2;
@@ -239,7 +291,7 @@ function resizeImage(img, size) {
     return canvas;
 }
 
-// 生成 ICO 文件（BMP 格式）
+// Create ICO file (BMP format)
 async function createIcoFile(images, sizes, colorModeValue) {
     const icoImages = [];
     
@@ -256,7 +308,7 @@ async function createIcoFile(images, sizes, colorModeValue) {
             });
         }
         
-        // 构建 ICO 文件
+        // Build ICO file
         const icoBuffer = buildIcoFile(iconImages);
         icoImages.push({
             name: imgData.name.replace(/\.[^/.]+$/, '') + '.ico',
@@ -267,7 +319,7 @@ async function createIcoFile(images, sizes, colorModeValue) {
     return icoImages;
 }
 
-// 加载图片
+// Load image
 function loadImage(src) {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -277,7 +329,7 @@ function loadImage(src) {
     });
 }
 
-// Canvas 转 BMP
+// Canvas to BMP
 function canvasToBmp(canvas, hasAlpha) {
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
@@ -294,21 +346,21 @@ function canvasToBmp(canvas, hasAlpha) {
     const buffer = new ArrayBuffer(fileSize);
     const view = new DataView(buffer);
     
-    // BMP 文件头
+    // BMP file header
     let offset = 0;
-    view.setUint32(offset, headerSize, true); offset += 4; // 头大小
-    view.setInt32(offset, width, true); offset += 4;       // 宽度
-    view.setInt32(offset, height * 2, true); offset += 4;  // 高度（双倍用于XOR和AND掩码）
-    view.setUint16(offset, 1, true); offset += 2;          // 平面数
-    view.setUint16(offset, bitsPerPixel, true); offset += 2; // 位深度
-    view.setUint32(offset, hasAlpha ? 0 : 0, true); offset += 4; // 压缩
-    view.setUint32(offset, imageSize, true); offset += 4;  // 图像大小
-    view.setInt32(offset, 2835, true); offset += 4;        // X 分辨率
-    view.setInt32(offset, 2835, true); offset += 4;        // Y 分辨率
-    view.setUint32(offset, 0, true); offset += 4;          // 颜色数
-    view.setUint32(offset, 0, true); offset += 4;          // 重要颜色
+    view.setUint32(offset, headerSize, true); offset += 4; // Header size
+    view.setInt32(offset, width, true); offset += 4;       // Width
+    view.setInt32(offset, height * 2, true); offset += 4;  // Height (double for XOR and AND masks)
+    view.setUint16(offset, 1, true); offset += 2;          // Planes
+    view.setUint16(offset, bitsPerPixel, true); offset += 2; // Bit depth
+    view.setUint32(offset, hasAlpha ? 0 : 0, true); offset += 4; // Compression
+    view.setUint32(offset, imageSize, true); offset += 4;  // Image size
+    view.setInt32(offset, 2835, true); offset += 4;        // X resolution
+    view.setInt32(offset, 2835, true); offset += 4;        // Y resolution
+    view.setUint32(offset, 0, true); offset += 4;          // Colors
+    view.setUint32(offset, 0, true); offset += 4;          // Important colors
     
-    // 像素数据（从下到上）
+    // Pixel data (bottom to top)
     for (let y = height - 1; y >= 0; y--) {
         for (let x = 0; x < width; x++) {
             const i = (y * width + x) * 4;
@@ -324,7 +376,7 @@ function canvasToBmp(canvas, hasAlpha) {
                 view.setUint8(offset++, a);
             }
         }
-        // 行填充
+        // Row padding
         const padding = rowSize - (width * (bitsPerPixel / 8));
         for (let p = 0; p < padding; p++) {
             view.setUint8(offset++, 0);
@@ -334,13 +386,13 @@ function canvasToBmp(canvas, hasAlpha) {
     return new Uint8Array(buffer);
 }
 
-// 构建 ICO 文件
+// Build ICO file
 function buildIcoFile(iconImages) {
     const numImages = iconImages.length;
     const headerSize = 6 + numImages * 16;
     let dataOffset = headerSize;
     
-    // 计算总大小
+    // Calculate total size
     let totalSize = headerSize;
     for (const img of iconImages) {
         totalSize += img.data.length;
@@ -349,27 +401,27 @@ function buildIcoFile(iconImages) {
     const buffer = new ArrayBuffer(totalSize);
     const view = new DataView(buffer);
     
-    // ICO 文件头
+    // ICO file header
     let offset = 0;
-    view.setUint16(offset, 0, true); offset += 2;      // 保留
-    view.setUint16(offset, 1, true); offset += 2;      // 类型 (1 = ICO)
-    view.setUint16(offset, numImages, true); offset += 2; // 图像数量
+    view.setUint16(offset, 0, true); offset += 2;      // Reserved
+    view.setUint16(offset, 1, true); offset += 2;      // Type (1 = ICO)
+    view.setUint16(offset, numImages, true); offset += 2; // Image count
     
-    // 目录项
+    // Directory entries
     for (const img of iconImages) {
         const size = img.size;
-        view.setUint8(offset++, size > 255 ? 0 : size);  // 宽度
-        view.setUint8(offset++, size > 255 ? 0 : size);  // 高度
-        view.setUint8(offset++, 0);                      // 颜色数
-        view.setUint8(offset++, 0);                      // 保留
-        view.setUint16(offset, 1, true); offset += 2;    // 颜色平面
-        view.setUint16(offset, 32, true); offset += 2;   // 位深度
-        view.setUint32(offset, img.data.length, true); offset += 4; // 数据大小
-        view.setUint32(offset, dataOffset, true); offset += 4; // 数据偏移
+        view.setUint8(offset++, size > 255 ? 0 : size);  // Width
+        view.setUint8(offset++, size > 255 ? 0 : size);  // Height
+        view.setUint8(offset++, 0);                      // Colors
+        view.setUint8(offset++, 0);                      // Reserved
+        view.setUint16(offset, 1, true); offset += 2;    // Color planes
+        view.setUint16(offset, 32, true); offset += 2;   // Bit depth
+        view.setUint32(offset, img.data.length, true); offset += 4; // Data size
+        view.setUint32(offset, dataOffset, true); offset += 4; // Data offset
         dataOffset += img.data.length;
     }
     
-    // 图像数据
+    // Image data
     for (const img of iconImages) {
         for (let i = 0; i < img.data.length; i++) {
             view.setUint8(offset++, img.data[i]);
@@ -379,7 +431,7 @@ function buildIcoFile(iconImages) {
     return new Uint8Array(buffer);
 }
 
-// 生成 ICO
+// Generate ICO
 async function generateIco() {
     const sizes = getSelectedSizes();
     if (sizes.length === 0) {
@@ -388,7 +440,7 @@ async function generateIco() {
     }
 
     btnGenerateIco.disabled = true;
-    btnGenerateIco.innerHTML = '<span class="icon">⏳</span> 生成中...';
+    btnGenerateIco.innerHTML = `<span class="btn-icon">${icons.loader}</span><span>生成中...</span>`;
 
     try {
         const icoFiles = await createIcoFile(uploadedImages, sizes, colorMode.value);
@@ -401,22 +453,22 @@ async function generateIco() {
         
         showResultModal(generatedFiles);
         updateUI();
-        showNotification('ICO 文件生成成功！', 'success');
+        showNotification('ICO 文件生成成功', 'success');
     } catch (error) {
         showNotification('生成失败：' + error.message, 'error');
     } finally {
         btnGenerateIco.disabled = false;
-        btnGenerateIco.innerHTML = '<span class="icon">✨</span> 生成 ICO';
+        btnGenerateIco.innerHTML = `<span class="btn-icon">${icons.sparkles}</span><span>生成 ICO</span>`;
     }
 }
 
-// 显示结果对话框
+// Show result modal
 function showResultModal(files) {
     resultContent.innerHTML = `
-        <div class="result-file-list">
+        <div class="result-file-list" role="list" aria-label="生成的文件列表">
             ${files.map(f => `
-                <div class="result-file-item">
-                    <span class="result-file-icon">🎯</span>
+                <div class="result-file-item" role="listitem">
+                    <span class="result-file-icon">${icons.target}</span>
                     <div class="result-file-info">
                         <div class="result-file-name">${f.name}</div>
                         <div class="result-file-sizes">尺寸: ${f.sizes.join(', ')}px</div>
@@ -424,12 +476,13 @@ function showResultModal(files) {
                 </div>
             `).join('')}
         </div>
-        <p style="color: #666; font-size: 14px;">共生成 ${files.length} 个 ICO 文件</p>
+        <p style="color: var(--color-text-secondary); font-size: var(--font-size-base);">共生成 ${files.length} 个 ICO 文件</p>
     `;
     resultModal.classList.add('show');
+    btnSaveIco.focus();
 }
 
-// 保存 ICO 文件
+// Save ICO files
 async function saveIcoFiles() {
     for (const file of generatedFiles) {
         const blob = new Blob([file.data], { type: 'image/x-icon' });
@@ -442,11 +495,11 @@ async function saveIcoFiles() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-    showNotification('ICO 文件已下载！', 'success');
+    showNotification('ICO 文件已下载', 'success');
     resultModal.classList.remove('show');
 }
 
-// 打包 ZIP
+// Package ZIP
 async function packageZip() {
     if (generatedFiles.length === 0) {
         showNotification('请先生成 ICO 文件', 'error');
@@ -454,7 +507,7 @@ async function packageZip() {
     }
 
     btnPackageZip.disabled = true;
-    btnPackageZip.innerHTML = '<span class="icon">⏳</span> 打包中...';
+    btnPackageZip.innerHTML = `<span class="btn-icon">${icons.loader}</span><span>打包中...</span>`;
 
     try {
         const zipBlob = await createZip(generatedFiles);
@@ -466,19 +519,17 @@ async function packageZip() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showNotification('ZIP 打包成功！', 'success');
+        showNotification('ZIP 打包成功', 'success');
     } catch (error) {
         showNotification('打包失败：' + error.message, 'error');
     } finally {
         btnPackageZip.disabled = false;
-        btnPackageZip.innerHTML = '<span class="icon">📦</span> 打包 ZIP';
+        btnPackageZip.innerHTML = `<span class="btn-icon">${icons.package}</span><span>打包 ZIP</span>`;
     }
 }
 
-// 创建 ZIP 文件（简化版）
+// Create ZIP file (simplified implementation)
 async function createZip(files) {
-    // 使用 JSZip 库或手动创建 ZIP
-    // 这里我们使用一个简单的 ZIP 实现
     const zipParts = [];
     let centralDir = [];
     let offset = 0;
@@ -488,52 +539,52 @@ async function createZip(files) {
         const nameBytes = new TextEncoder().encode(file.name);
         const data = file.data;
         
-        // 本地文件头
+        // Local file header
         const localHeader = new ArrayBuffer(30 + nameBytes.length);
         const lhView = new DataView(localHeader);
         let pos = 0;
         
-        lhView.setUint32(pos, 0x04034b50, true); pos += 4;  // 签名
-        lhView.setUint16(pos, 20, true); pos += 2;          // 版本
-        lhView.setUint16(pos, 0, true); pos += 2;           // 标志
-        lhView.setUint16(pos, 0, true); pos += 2;           // 压缩方法 (存储)
-        lhView.setUint16(pos, 0, true); pos += 2;           // 时间
-        lhView.setUint16(pos, 0, true); pos += 2;           // 日期
+        lhView.setUint32(pos, 0x04034b50, true); pos += 4;  // Signature
+        lhView.setUint16(pos, 20, true); pos += 2;          // Version
+        lhView.setUint16(pos, 0, true); pos += 2;           // Flags
+        lhView.setUint16(pos, 0, true); pos += 2;           // Compression method (store)
+        lhView.setUint16(pos, 0, true); pos += 2;           // Time
+        lhView.setUint16(pos, 0, true); pos += 2;           // Date
         lhView.setUint32(pos, crc32(data), true); pos += 4; // CRC32
-        lhView.setUint32(pos, data.length, true); pos += 4; // 压缩大小
-        lhView.setUint32(pos, data.length, true); pos += 4; // 未压缩大小
-        lhView.setUint16(pos, nameBytes.length, true); pos += 2; // 名称长度
-        lhView.setUint16(pos, 0, true); pos += 2;           // 额外字段长度
+        lhView.setUint32(pos, data.length, true); pos += 4; // Compressed size
+        lhView.setUint32(pos, data.length, true); pos += 4; // Uncompressed size
+        lhView.setUint16(pos, nameBytes.length, true); pos += 2; // Name length
+        lhView.setUint16(pos, 0, true); pos += 2;           // Extra field length
         
-        // 写入文件名
+        // Write filename
         const lhBytes = new Uint8Array(localHeader);
         lhBytes.set(nameBytes, pos);
         
         zipParts.push(new Uint8Array(localHeader));
         zipParts.push(data);
         
-        // 中央目录记录
+        // Central directory record
         const cdHeader = new ArrayBuffer(46 + nameBytes.length);
         const cdView = new DataView(cdHeader);
         pos = 0;
         
-        cdView.setUint32(pos, 0x02014b50, true); pos += 4;  // 签名
-        cdView.setUint16(pos, 20, true); pos += 2;          // 创建版本
-        cdView.setUint16(pos, 20, true); pos += 2;          // 需要版本
-        cdView.setUint16(pos, 0, true); pos += 2;           // 标志
-        cdView.setUint16(pos, 0, true); pos += 2;           // 压缩方法
-        cdView.setUint16(pos, 0, true); pos += 2;           // 时间
-        cdView.setUint16(pos, 0, true); pos += 2;           // 日期
+        cdView.setUint32(pos, 0x02014b50, true); pos += 4;  // Signature
+        cdView.setUint16(pos, 20, true); pos += 2;          // Created version
+        cdView.setUint16(pos, 20, true); pos += 2;          // Needed version
+        cdView.setUint16(pos, 0, true); pos += 2;           // Flags
+        cdView.setUint16(pos, 0, true); pos += 2;           // Compression method
+        cdView.setUint16(pos, 0, true); pos += 2;           // Time
+        cdView.setUint16(pos, 0, true); pos += 2;           // Date
         cdView.setUint32(pos, crc32(data), true); pos += 4; // CRC32
-        cdView.setUint32(pos, data.length, true); pos += 4; // 压缩大小
-        cdView.setUint32(pos, data.length, true); pos += 4; // 未压缩大小
-        cdView.setUint16(pos, nameBytes.length, true); pos += 2; // 名称长度
-        cdView.setUint16(pos, 0, true); pos += 2;           // 额外字段长度
-        cdView.setUint16(pos, 0, true); pos += 2;           // 注释长度
-        cdView.setUint16(pos, 0, true); pos += 2;           // 磁盘号
-        cdView.setUint16(pos, 0, true); pos += 2;           // 内部属性
-        cdView.setUint32(pos, 0, true); pos += 4;           // 外部属性
-        cdView.setUint32(pos, offset, true); pos += 4;      // 本地头偏移
+        cdView.setUint32(pos, data.length, true); pos += 4; // Compressed size
+        cdView.setUint32(pos, data.length, true); pos += 4; // Uncompressed size
+        cdView.setUint16(pos, nameBytes.length, true); pos += 2; // Name length
+        cdView.setUint16(pos, 0, true); pos += 2;           // Extra field length
+        cdView.setUint16(pos, 0, true); pos += 2;           // Comment length
+        cdView.setUint16(pos, 0, true); pos += 2;           // Disk number
+        cdView.setUint16(pos, 0, true); pos += 2;           // Internal attributes
+        cdView.setUint32(pos, 0, true); pos += 4;           // External attributes
+        cdView.setUint32(pos, offset, true); pos += 4;      // Local header offset
         
         const cdBytes = new Uint8Array(cdHeader);
         cdBytes.set(nameBytes, pos);
@@ -549,19 +600,19 @@ async function createZip(files) {
         centralDirSize += cd.length;
     }
     
-    // 中央目录结束记录
+    // End of central directory record
     const eocd = new ArrayBuffer(22);
     const eocdView = new DataView(eocd);
-    eocdView.setUint32(0, 0x06054b50, true);           // 签名
-    eocdView.setUint16(4, 0, true);                    // 磁盘号
-    eocdView.setUint16(6, 0, true);                    // 中央目录磁盘
-    eocdView.setUint16(8, files.length, true);         // 磁盘上的记录数
-    eocdView.setUint16(10, files.length, true);        // 总记录数
-    eocdView.setUint32(12, centralDirSize, true);      // 中央目录大小
-    eocdView.setUint32(16, centralDirOffset, true);    // 中央目录偏移
-    eocdView.setUint16(20, 0, true);                   // 注释长度
+    eocdView.setUint32(0, 0x06054b50, true);           // Signature
+    eocdView.setUint16(4, 0, true);                    // Disk number
+    eocdView.setUint16(6, 0, true);                    // Central directory disk
+    eocdView.setUint16(8, files.length, true);         // Records on disk
+    eocdView.setUint16(10, files.length, true);        // Total records
+    eocdView.setUint32(12, centralDirSize, true);      // Central directory size
+    eocdView.setUint32(16, centralDirOffset, true);    // Central directory offset
+    eocdView.setUint16(20, 0, true);                   // Comment length
     
-    // 合并所有部分
+    // Merge all parts
     const totalSize = offset + centralDirSize + 22;
     const zipData = new Uint8Array(totalSize);
     let zipPos = 0;
@@ -581,7 +632,7 @@ async function createZip(files) {
     return new Blob([zipData], { type: 'application/zip' });
 }
 
-// 简单的 CRC32 实现
+// Simple CRC32 implementation
 function crc32(data) {
     const table = new Uint32Array(256);
     for (let i = 0; i < 256; i++) {
@@ -599,7 +650,7 @@ function crc32(data) {
     return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
-// 下载 ZIP（从结果对话框）
+// Download ZIP (from result modal)
 async function downloadZip() {
     if (generatedFiles.length === 0) {
         showNotification('没有可下载的文件', 'error');
@@ -616,64 +667,25 @@ async function downloadZip() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showNotification('ZIP 文件已下载！', 'success');
+        showNotification('ZIP 文件已下载', 'success');
         resultModal.classList.remove('show');
     } catch (error) {
         showNotification('下载失败：' + error.message, 'error');
     }
 }
 
-// 显示通知
+// Show notification
 function showNotification(message, type = 'info') {
-    // 创建通知元素
     const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        z-index: 9999;
-        animation: slideIn 0.3s ease;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    `;
-
-    switch (type) {
-        case 'success':
-            notification.style.background = '#27ae60';
-            break;
-        case 'error':
-            notification.style.background = '#e74c3c';
-            break;
-        case 'warning':
-            notification.style.background = '#f39c12';
-            break;
-        default:
-            notification.style.background = '#3498db';
-    }
-
+    notification.className = `notification notification-${type}`;
+    notification.setAttribute('role', 'alert');
+    notification.setAttribute('aria-live', 'polite');
     notification.textContent = message;
     document.body.appendChild(notification);
 
-    // 3秒后移除
+    // Remove after 3 seconds
     setTimeout(() => {
         notification.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
 }
-
-// 添加动画样式
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes slideOut {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(100%); opacity: 0; }
-    }
-`;
-document.head.appendChild(style);
