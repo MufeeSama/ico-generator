@@ -29,11 +29,18 @@ if sys.platform == 'win32':
 elif sys.platform == 'darwin':
     # macOS: 使用 WebKit（系统自带），无需 pythonnet/clr
     # tkinter 用于 get_center_position() 获取屏幕尺寸（动态导入，需显式添加）
+    # PyObjC 用于 Cocoa 集成（pywebview macOS 后端所需）
     hiddenimports = [
         'webview',
         'PIL',
         'PIL.Image',
         'tkinter',
+        'webview.platforms.cocoa',
+        'objc',
+        'Foundation',
+        'AppKit',
+        'WebKit',
+        'CoreFoundation',
     ]
 else:
     # Linux 及其他
@@ -159,7 +166,7 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 # macOS 打包为 .app 而非 .exe
 exe_name = 'ICO生成器'
 if sys.platform == 'darwin':
-    # macOS 上 PyInstaller 自动生成 .app 包
+    # macOS 使用 BUNDLE() 包裹 EXE() 生成 .app 包
     pass
 
 # 检查是否有图标文件
@@ -168,6 +175,9 @@ if os.path.exists('icon.ico') and sys.platform == 'win32':
     icon_path = 'icon.ico'
 elif os.path.exists('icon.icns') and sys.platform == 'darwin':
     icon_path = 'icon.icns'
+
+# macOS 上 UPX 不可用，仅 Windows 启用
+use_upx = sys.platform == 'win32'
 
 exe = EXE(
     pyz,
@@ -180,7 +190,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=use_upx,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -190,3 +200,20 @@ exe = EXE(
     entitlements_file=None,
     icon=icon_path,
 )
+
+# macOS: 用 BUNDLE() 创建 .app 包结构
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        exe,
+        a.binaries,
+        a.datas,
+        [],
+        name=exe_name + '.app',
+        icon=icon_path,
+        bundle_identifier='com.ico-generator.app',
+        info_plist={
+            'NSHighResolutionCapable': True,
+            'CFBundleDisplayName': 'ICO 生成器',
+            'CFBundleName': 'ICO生成器',
+        },
+    )

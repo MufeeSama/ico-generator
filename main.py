@@ -1,5 +1,6 @@
 import webview
 import os
+import sys
 import json
 import base64
 import struct
@@ -483,13 +484,20 @@ def get_center_position(width, height):
             screen_width = user32.GetSystemMetrics(0)
             screen_height = user32.GetSystemMetrics(1)
         elif system == 'Darwin':
-            # macOS: 使用 tkinter 获取屏幕尺寸，用 withdraw() 防止窗口闪烁
-            import tkinter as tk
-            root = tk.Tk()
-            root.withdraw()  # 隐藏窗口，避免显示和焦点抢占
-            screen_width = root.winfo_screenwidth()
-            screen_height = root.winfo_screenheight()
-            root.destroy()
+            # macOS: 使用 AppKit 获取屏幕尺寸，避免 tkinter NSApplication 冲突
+            try:
+                from AppKit import NSScreen
+                frame = NSScreen.mainScreen().frame()
+                screen_width = int(frame.size.width)
+                screen_height = int(frame.size.height)
+            except ImportError:
+                # 兜底：使用 tkinter（需确保打包时包含 tkinter）
+                import tkinter as tk
+                root = tk.Tk()
+                root.withdraw()
+                screen_width = root.winfo_screenwidth()
+                screen_height = root.winfo_screenheight()
+                root.destroy()
         else:
             # Linux 及其他平台
             import tkinter as tk
@@ -510,8 +518,12 @@ def get_center_position(width, height):
 def main():
     api = Api()
 
-    # 获取HTML文件路径
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web', 'index.html')
+    # 获取HTML文件路径（支持 PyInstaller 打包后的资源路径）
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(base_path, 'web', 'index.html')
 
     # 计算居中位置
     window_width = 1200
