@@ -504,29 +504,49 @@ function showResultModal(files) {
     btnSaveIco.focus();
 }
 
-// Save ICO files via Python API
+// Save ICO files
 async function saveIcoFiles() {
     if (generatedFiles.length === 0) {
         showNotification('没有可保存的文件', 'error');
         return;
     }
 
-    try {
-        // Convert ArrayBuffer to base64 for Python API
-        const filesForSave = generatedFiles.map(f => ({
-            name: f.name,
-            base64: arrayBufferToBase64(f.data)
-        }));
+    // Check if running in pywebview environment
+    const isPywebview = window.pywebview && window.pywebview.api;
 
-        const result = await window.pywebview.api.save_ico_from_base64(filesForSave);
-        if (result.success) {
-            showNotification('ICO 文件已保存', 'success');
-            resultModal.classList.remove('show');
-        } else {
-            showNotification(result.message || '保存失败', 'error');
+    if (isPywebview) {
+        // Use Python API in pywebview environment
+        try {
+            const filesForSave = generatedFiles.map(f => ({
+                name: f.name,
+                base64: arrayBufferToBase64(f.data)
+            }));
+
+            const result = await window.pywebview.api.save_ico_from_base64(filesForSave);
+            if (result.success) {
+                showNotification('ICO 文件已保存', 'success');
+                resultModal.classList.remove('show');
+            } else {
+                showNotification(result.message || '保存失败', 'error');
+            }
+        } catch (error) {
+            showNotification('保存失败：' + error.message, 'error');
         }
-    } catch (error) {
-        showNotification('保存失败：' + error.message, 'error');
+    } else {
+        // Use browser download in web environment
+        for (const file of generatedFiles) {
+            const blob = new Blob([file.data], { type: 'image/x-icon' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        showNotification('ICO 文件已下载', 'success');
+        resultModal.classList.remove('show');
     }
 }
 
