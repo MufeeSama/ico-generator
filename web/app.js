@@ -17,6 +17,7 @@ const icons = {
 // Global state
 let uploadedImages = [];
 let generatedFiles = [];
+let currentTheme = localStorage.getItem('ico-generator-theme') || 'light';
 
 // DOM elements
 const dropZone = document.getElementById('dropZone');
@@ -39,6 +40,16 @@ const resultModal = document.getElementById('resultModal');
 const resultContent = document.getElementById('resultContent');
 const customSizes = document.getElementById('customSizes');
 const colorMode = document.getElementById('colorMode');
+const resizeMode = document.getElementById('resizeMode');
+
+// Theme toggle
+const btnThemeToggle = document.getElementById('btnThemeToggle');
+
+// Progress bar
+const progressContainer = document.getElementById('progressContainer');
+const progressFill = document.getElementById('progressFill');
+const progressText = document.getElementById('progressText');
+const progressPercent = document.getElementById('progressPercent');
 
 // Titlebar elements
 const btnMinimize = document.getElementById('btnMinimize');
@@ -46,6 +57,7 @@ const btnClose = document.getElementById('btnClose');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    applyTheme(currentTheme);
     bindEvents();
     updateUI();
 });
@@ -130,6 +142,9 @@ function bindEvents() {
 
     // Generate ICO
     btnGenerateIco.addEventListener('click', generateIco);
+
+    // Theme toggle
+    btnThemeToggle.addEventListener('click', toggleTheme);
 
     // Package ZIP
     btnPackageZip.addEventListener('click', packageZip);
@@ -291,51 +306,66 @@ function getSelectedSizes() {
 }
 
 // Resize image to specified size
-function resizeImage(img, size) {
+function resizeImage(img, size, mode) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
-    
+
     // High quality scaling
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    
-    // Draw image (keep ratio, center crop)
-    const scale = Math.max(size / img.width, size / img.height);
-    const x = (size - img.width * scale) / 2;
-    const y = (size - img.height * scale) / 2;
-    
-    ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-    
+
+    if (mode === 'stretch') {
+        // Stretch: ignore aspect ratio, fill exactly
+        ctx.drawImage(img, 0, 0, size, size);
+    } else if (mode === 'fit') {
+        // Fit: keep aspect ratio, center with transparent padding
+        const scale = Math.min(size / img.width, size / img.height);
+        const x = (size - img.width * scale) / 2;
+        const y = (size - img.height * scale) / 2;
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+    } else {
+        // Cover: center-crop to fill (default)
+        const scale = Math.max(size / img.width, size / img.height);
+        const x = (size - img.width * scale) / 2;
+        const y = (size - img.height * scale) / 2;
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+    }
+
     return canvas;
 }
 
 // Create ICO file (BMP format)
-async function createIcoFile(images, sizes, colorModeValue) {
+async function createIcoFile(images, sizes, colorModeValue, resizeModeValue, onProgress) {
     const icoImages = [];
-    
-    for (const imgData of images) {
+
+    for (let i = 0; i < images.length; i++) {
+        const imgData = images[i];
         const img = await loadImage(imgData.preview);
         const iconImages = [];
-        
+
         for (const size of sizes) {
-            const canvas = resizeImage(img, size);
+            const canvas = resizeImage(img, size, resizeModeValue);
             const bmpData = canvasToBmp(canvas, colorModeValue === 'rgba');
             iconImages.push({
                 size: size,
                 data: bmpData
             });
         }
-        
+
         // Build ICO file
         const icoBuffer = buildIcoFile(iconImages);
         icoImages.push({
             name: imgData.name.replace(/\.[^/.]+$/, '') + '.ico',
             data: icoBuffer
         });
+
+        if (onProgress) {
+            onProgress(i + 1, images.length);
+        }
     }
-    
+
     return icoImages;
 }
 
@@ -464,19 +494,32 @@ async function generateIco() {
     btnGenerateIco.disabled = true;
     btnGenerateIco.innerHTML = `<span class="btn-icon">${icons.loader}</span><span>生成中...</span>`;
 
+    showProgress(true, 0);
+
     try {
-        const icoFiles = await createIcoFile(uploadedImages, sizes, colorMode.value);
-        
+        const icoFiles = await createIcoFile(
+            uploadedImages,
+            sizes,
+            colorMode.value,
+            resizeMode.value,
+            (current, total) => {
+                const pct = Math.round((current / total) * 100);
+                showProgress(true, pct, `正在处理 ${current}/${total} 张图片`);
+            }
+        );
+
         generatedFiles = icoFiles.map((file, i) => ({
             name: file.name,
             data: file.data,
             sizes: sizes
         }));
-        
+
+        showProgress(false);
         showResultModal(generatedFiles);
         updateUI();
         showNotification('ICO 文件生成成功', 'success');
     } catch (error) {
+        showProgress(false);
         showNotification('生成失败：' + error.message, 'error');
     } finally {
         btnGenerateIco.disabled = false;
@@ -732,6 +775,42 @@ async function downloadZip() {
         resultModal.classList.remove('show');
     } catch (error) {
         showNotification('下载失败：' + error.message, 'error');
+    }
+}
+
+// ============================================
+// Theme Toggle (Dark Mode)
+// ============================================
+
+function toggleTheme() {
+    currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(currentTheme);
+    localStorage.setItem('ico-generator-theme', currentTheme);
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+// ============================================
+// Progress Bar
+// ============================================
+
+function showProgress(active, percent, text) {
+    if (active) {
+        progressContainer.classList.add('active');
+        progressFill.style.width = percent + '%';
+        progressPercent.textContent = percent + '%';
+        if (text) {
+            progressText.textContent = text;
+        }
+        progressContainer.setAttribute('aria-valuenow', percent);
+    } else {
+        progressContainer.classList.remove('active');
+        progressFill.style.width = '0%';
+        progressPercent.textContent = '0%';
+        progressText.textContent = '准备中...';
+        progressContainer.setAttribute('aria-valuenow', 0);
     }
 }
 

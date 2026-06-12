@@ -9,11 +9,11 @@
     --color-primary: #2563eb;
     --color-primary-hover: #1d4ed8;
     --color-primary-light: #dbeafe;
-    
+
     /* Secondary Colors */
     --color-secondary: #f59e0b;
     --color-secondary-hover: #d97706;
-    
+
     /* Semantic Colors */
     --color-success: #059669;
     --color-success-hover: #047857;
@@ -23,20 +23,28 @@
     --color-info-hover: #0369a1;
     --color-warning: #7c3aed;
     --color-warning-hover: #6d28d9;
-    
+
     /* Surface Colors (Light Theme) */
     --color-surface: #f8fafc;
     --color-surface-secondary: #ffffff;
     --color-surface-tertiary: #f1f5f9;
     --color-border: #e2e8f0;
     --color-border-hover: #cbd5e1;
-    
+
     /* Text Colors */
     --color-text-primary: #1e293b;
     --color-text-secondary: #475569;
     --color-text-muted: #94a3b8;
     --color-text-inverse: #ffffff;
-    
+
+    /* Titlebar */
+    --titlebar-bg: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    --titlebar-border: #1d4ed8;
+
+    /* Progress */
+    --progress-bg: #e2e8f0;
+    --progress-fill: #2563eb;
+
     /* Spacing Scale (8dp rhythm) */
     --spacing-xs: 4px;
     --spacing-sm: 8px;
@@ -44,7 +52,7 @@
     --spacing-lg: 24px;
     --spacing-xl: 32px;
     --spacing-2xl: 48px;
-    
+
     /* Typography */
     --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
     --font-size-xs: 12px;
@@ -57,28 +65,69 @@
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
-    
+
     /* Border Radius */
     --radius-sm: 4px;
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-xl: 16px;
-    
+
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
     --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
     --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
-    
+
     /* Transitions */
     --transition-fast: 150ms ease;
     --transition-normal: 200ms ease;
     --transition-slow: 300ms ease;
-    
+
     /* Z-index Scale */
     --z-index-dropdown: 100;
     --z-index-modal: 1000;
     --z-index-notification: 9999;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+    --color-primary: #3b82f6;
+    --color-primary-hover: #60a5fa;
+    --color-primary-light: #1e3a5f;
+
+    --color-secondary: #f59e0b;
+    --color-secondary-hover: #fbbf24;
+
+    --color-success: #10b981;
+    --color-success-hover: #34d399;
+    --color-danger: #ef4444;
+    --color-danger-hover: #f87171;
+    --color-info: #38bdf8;
+    --color-info-hover: #7dd3fc;
+    --color-warning: #a78bfa;
+    --color-warning-hover: #c4b5fd;
+
+    --color-surface: #0f172a;
+    --color-surface-secondary: #1e293b;
+    --color-surface-tertiary: #334155;
+    --color-border: #334155;
+    --color-border-hover: #475569;
+
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #64748b;
+    --color-text-inverse: #ffffff;
+
+    --titlebar-bg: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+    --titlebar-border: #1e3a8a;
+
+    --progress-bg: #334155;
+    --progress-fill: #3b82f6;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
 }
 
 /* ============================================
@@ -112,13 +161,13 @@ body {
     left: 0;
     right: 0;
     height: 40px;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: var(--titlebar-bg);
     display: flex;
     justify-content: space-between;
     align-items: center;
     user-select: none;
     z-index: 1001;
-    border-bottom: 1px solid #1d4ed8;
+    border-bottom: 1px solid var(--titlebar-border);
 }
 
 .titlebar-drag {
@@ -339,10 +388,94 @@ body {
     border-color: var(--color-border-hover);
 }
 
+/* Theme Toggle Button (Titlebar) */
+.titlebar .theme-toggle {
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-fast);
+    width: 46px;
+    height: 100%;
+    border-radius: 0;
+    margin-left: auto;
+}
+
+.titlebar .theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.titlebar .theme-toggle .theme-icon-sun,
+.titlebar .theme-toggle .theme-icon-moon {
+    width: 16px;
+    height: 16px;
+}
+
+[data-theme="light"] .titlebar .theme-toggle .theme-icon-moon,
+[data-theme="dark"] .titlebar .theme-toggle .theme-icon-sun {
+    display: none;
+}
+
+[data-theme="light"] .titlebar .theme-toggle .theme-icon-sun,
+[data-theme="dark"] .titlebar .theme-toggle .theme-icon-moon {
+    display: block;
+}
+
 .image-count {
     margin-left: auto;
     color: var(--color-text-secondary);
     font-size: var(--font-size-base);
+}
+
+/* ============================================
+   Progress Bar
+   ============================================ */
+
+.progress-container {
+    display: none;
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-surface-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+}
+
+.progress-container.active {
+    display: block;
+    animation: fadeIn var(--transition-normal);
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--progress-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--progress-fill);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* ============================================

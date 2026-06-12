@@ -238,7 +238,7 @@ class Api:
 
         return header + bytes(xor_mask) + and_mask
 
-    def generate_ico(self, sizes, color_mode='rgba'):
+    def generate_ico(self, sizes, color_mode='rgba', resize_mode='cover'):
         """生成ICO文件"""
         if not self.uploaded_images:
             return {'success': False, 'message': '请先添加图片'}
@@ -256,9 +256,32 @@ class Api:
                     with Image.open(img_info['path']) as img:
                         if img.mode != 'RGBA':
                             img = img.convert('RGBA')
-                        
+
                         for size in sorted(size_list, reverse=True):
-                            resized = img.resize((size, size), Image.Resampling.LANCZOS)
+                            if resize_mode == 'stretch':
+                                # 拉伸：忽略比例，直接缩放到目标尺寸
+                                resized = img.resize((size, size), Image.Resampling.LANCZOS)
+                            elif resize_mode == 'fit':
+                                # 适应：保持比例，居中放置，多余部分透明
+                                resized = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+                                temp = img.copy()
+                                temp.thumbnail((size, size), Image.Resampling.LANCZOS)
+                                x = (size - temp.width) // 2
+                                y = (size - temp.height) // 2
+                                if temp.mode == 'RGBA':
+                                    resized.paste(temp, (x, y), temp)
+                                else:
+                                    resized.paste(temp, (x, y))
+                                temp.close()
+                            else:
+                                # 填充：居中裁剪为正方形后再缩放（默认）
+                                min_side = min(img.width, img.height)
+                                left = (img.width - min_side) // 2
+                                top = (img.height - min_side) // 2
+                                cropped = img.crop((left, top, left + min_side, top + min_side))
+                                resized = cropped.resize((size, size), Image.Resampling.LANCZOS)
+                                cropped.close()
+
                             if color_mode == 'rgb':
                                 resized = resized.convert('RGB')
                             icon_images.append(resized)

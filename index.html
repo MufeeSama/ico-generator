@@ -15,9 +15,25 @@
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <polyline points="21 15 16 10 5 21"/>
             </svg>
-            <span class="titlebar-title">ICO 生成器 v1.0.0</span>
+            <span class="titlebar-title">ICO 生成器 v2.0</span>
         </div>
         <div class="titlebar-controls">
+            <button class="titlebar-btn theme-toggle" id="btnThemeToggle" aria-label="切换深色模式" title="切换深色模式">
+                <svg class="theme-icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="5"/>
+                    <line x1="12" y1="1" x2="12" y2="3"/>
+                    <line x1="12" y1="21" x2="12" y2="23"/>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                    <line x1="1" y1="12" x2="3" y2="12"/>
+                    <line x1="21" y1="12" x2="23" y2="12"/>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+                <svg class="theme-icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+            </button>
             <button class="titlebar-btn titlebar-minimize" id="btnMinimize" aria-label="最小化窗口" title="最小化">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
@@ -39,7 +55,7 @@
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <polyline points="21 15 16 10 5 21"/>
             </svg>
-            <h1 class="title">ICO 生成器 v1.0.0</h1>
+            <h1 class="title">ICO 生成器 v2.0</h1>
         </header>
 
         <!-- 工具栏 -->
@@ -153,7 +169,7 @@
             </div>
         </section>
 
-        <!-- 自定义尺寸和颜色模式 -->
+        <!-- 自定义尺寸、颜色模式和缩放模式 -->
         <section class="section row-section">
             <div class="row-item">
                 <label class="section-label" for="customSizes">自定义尺寸（可选）</label>
@@ -167,7 +183,26 @@
                     <option value="rgb">RGB (24位，无透明)</option>
                 </select>
             </div>
+            <div class="row-item">
+                <label class="section-label" for="resizeMode">缩放模式</label>
+                <select class="color-mode-select" id="resizeMode" aria-label="选择缩放模式">
+                    <option value="cover">填充（裁剪居中，铺满画布）</option>
+                    <option value="fit">适应（保持比例，留白边）</option>
+                    <option value="stretch">拉伸（强制拉伸，可能变形）</option>
+                </select>
+            </div>
         </section>
+
+        <!-- 进度条 -->
+        <div class="progress-container" id="progressContainer" role="progressbar" aria-label="生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-info">
+                <span id="progressText">准备中...</span>
+                <span id="progressPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
 
         <!-- 底部按钮 -->
         <footer class="bottom-actions" role="group" aria-label="主要操作">
@@ -209,7 +244,7 @@
                 </button>
             </div>
             <div class="modal-body">
-                <h2>ICO 生成器 v1.0.0</h2>
+                <h2>ICO 生成器 v2.0</h2>
                 <p>一个简单易用的 ICO 图标生成工具。</p>
                 <p>支持多种预设尺寸和自定义尺寸，可批量生成 ICO 文件。</p>
                 <p>技术栈：Python + pywebview + PIL</p>
