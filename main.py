@@ -281,6 +281,24 @@ class Api:
             import traceback
             return {'success': False, 'message': f'生成失败: {str(e)}\n{traceback.format_exc()}'}
 
+    def save_ico_from_base64(self, files):
+        """从 base64 数据保存 ICO 文件到用户选择的位置"""
+        if not files:
+            return {'success': False, 'message': '没有可保存的文件'}
+        result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        if not result or len(result) == 0:
+            return {'success': False, 'message': '未选择保存位置'}
+        folder = result[0]
+        try:
+            for f in files:
+                data = base64.b64decode(f['base64'])
+                dst = os.path.join(folder, f['name'])
+                with open(dst, 'wb') as fp:
+                    fp.write(data)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'message': f'保存失败: {str(e)}'}
+
     def save_ico(self, file_path, ico_files):
         """保存ICO文件到指定位置"""
         try:

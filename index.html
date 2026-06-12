@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -7,6 +7,31 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- 自定义标题栏 -->
+    <div class="titlebar" role="banner" aria-label="窗口标题栏">
+        <div class="titlebar-drag" id="titlebarDrag">
+            <svg class="titlebar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <span class="titlebar-title">ICO 生成器 v1.0.0</span>
+        </div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn titlebar-minimize" id="btnMinimize" aria-label="最小化窗口" title="最小化">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+            </button>
+            <button class="titlebar-btn titlebar-close" id="btnClose" aria-label="关闭窗口" title="关闭">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <div class="container">
         <header class="header">
             <svg class="header-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -187,7 +212,7 @@
                 <h2>ICO 生成器 v1.0.0</h2>
                 <p>一个简单易用的 ICO 图标生成工具。</p>
                 <p>支持多种预设尺寸和自定义尺寸，可批量生成 ICO 文件。</p>
-                <p>纯前端实现，无需后端服务器。</p>
+                <p>技术栈：Python + pywebview + PIL</p>
             </div>
         </div>
     </div>

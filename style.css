@@ -3,7 +3,7 @@
    Style: Minimal Professional Tool
    ============================================ */
 
-/* CSS Variables - Semantic Color Tokens */
+/* CSS Variables - Semantic Color Tokens (Light Theme) */
 :root {
     /* Primary Colors */
     --color-primary: #2563eb;
@@ -24,9 +24,9 @@
     --color-warning: #7c3aed;
     --color-warning-hover: #6d28d9;
     
-    /* Surface Colors */
-    --color-surface: #ffffff;
-    --color-surface-secondary: #f8fafc;
+    /* Surface Colors (Light Theme) */
+    --color-surface: #f8fafc;
+    --color-surface-secondary: #ffffff;
     --color-surface-tertiary: #f1f5f9;
     --color-border: #e2e8f0;
     --color-border-hover: #cbd5e1;
@@ -96,9 +96,85 @@ body {
     font-size: var(--font-size-base);
     line-height: var(--line-height);
     color: var(--color-text-primary);
-    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    background: var(--color-surface);
     min-height: 100vh;
-    padding: var(--spacing-lg);
+    padding: 0;
+    overflow: hidden;
+}
+
+/* ============================================
+   Custom Titlebar (Frameless Window)
+   ============================================ */
+
+.titlebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    z-index: 1001;
+    border-bottom: 1px solid #1d4ed8;
+}
+
+.titlebar-drag {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding-left: var(--spacing-md);
+    cursor: move;
+}
+
+.titlebar-icon {
+    color: #ffffff;
+}
+
+.titlebar-title {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    color: #ffffff;
+}
+
+.titlebar-controls {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+.titlebar-btn {
+    width: 46px;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-fast);
+}
+
+.titlebar-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.titlebar-btn:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+.titlebar-minimize:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.titlebar-close:hover {
+    background: var(--color-danger);
 }
 
 /* ============================================
@@ -106,12 +182,13 @@ body {
    ============================================ */
 
 .container {
-    max-width: 900px;
-    margin: 0 auto;
-    background: var(--color-surface);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
-    padding: var(--spacing-xl);
+    max-width: 100%;
+    height: calc(100vh - 40px);
+    margin: 0;
+    margin-top: 40px;
+    background: var(--color-surface-secondary);
+    padding: var(--spacing-lg);
+    overflow-y: auto;
 }
 
 /* ============================================
@@ -387,7 +464,7 @@ body {
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(30, 41, 59, 0.8);
+    background: rgba(30, 41, 59, 0.9);
     color: var(--color-text-inverse);
     font-size: var(--font-size-xs);
     padding: var(--spacing-xs);
@@ -449,7 +526,9 @@ body {
 }
 
 .size-checkbox .checkmark {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: var(--spacing-sm) var(--spacing-md);
     background: var(--color-surface-secondary);
     border: 1px solid var(--color-border);
@@ -485,6 +564,8 @@ body {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
+    background: var(--color-surface-secondary);
+    color: var(--color-text-primary);
     transition: all var(--transition-fast);
     min-height: 44px; /* Touch target */
 }
@@ -513,7 +594,8 @@ body {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
-    background: var(--color-surface);
+    background: var(--color-surface-secondary);
+    color: var(--color-text-primary);
     cursor: pointer;
     transition: all var(--transition-fast);
     min-height: 44px; /* Touch target */
@@ -566,13 +648,14 @@ body {
 }
 
 .modal-content {
-    background: var(--color-surface);
+    background: var(--color-surface-secondary);
     border-radius: var(--radius-lg);
     width: 90%;
     max-width: 500px;
     max-height: 80vh;
     overflow: hidden;
     box-shadow: var(--shadow-xl);
+    border: 1px solid var(--color-border);
 }
 
 .modal-header {
@@ -646,7 +729,7 @@ body {
    ============================================ */
 
 .result-file-list {
-    background: var(--color-surface-secondary);
+    background: var(--color-surface-tertiary);
     border-radius: var(--radius-md);
     padding: var(--spacing-md);
     margin-bottom: var(--spacing-md);

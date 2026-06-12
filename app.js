@@ -40,6 +40,10 @@ const resultContent = document.getElementById('resultContent');
 const customSizes = document.getElementById('customSizes');
 const colorMode = document.getElementById('colorMode');
 
+// Titlebar elements
+const btnMinimize = document.getElementById('btnMinimize');
+const btnClose = document.getElementById('btnClose');
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
@@ -48,6 +52,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Bind events
 function bindEvents() {
+    // Titlebar window controls
+    if (btnMinimize) {
+        btnMinimize.addEventListener('click', () => {
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.minimize_window();
+            }
+        });
+    }
+    if (btnClose) {
+        btnClose.addEventListener('click', () => {
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.close_window();
+            }
+        });
+    }
+
     // Add image button
     btnAddImage.addEventListener('click', () => {
         const input = document.createElement('input');
@@ -364,11 +384,13 @@ function canvasToBmp(canvas, hasAlpha) {
     for (let y = height - 1; y >= 0; y--) {
         for (let x = 0; x < width; x++) {
             const i = (y * width + x) * 4;
-            const b = data[i];
+            // Canvas ImageData is RGBA, BMP needs BGRA
+            const r = data[i];
             const g = data[i + 1];
-            const r = data[i + 2];
+            const b = data[i + 2];
             const a = data[i + 3];
             
+            // Write in BGRA order for BMP
             view.setUint8(offset++, b);
             view.setUint8(offset++, g);
             view.setUint8(offset++, r);
@@ -482,21 +504,40 @@ function showResultModal(files) {
     btnSaveIco.focus();
 }
 
-// Save ICO files
+// Save ICO files via Python API
 async function saveIcoFiles() {
-    for (const file of generatedFiles) {
-        const blob = new Blob([file.data], { type: 'image/x-icon' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+    if (generatedFiles.length === 0) {
+        showNotification('没有可保存的文件', 'error');
+        return;
     }
-    showNotification('ICO 文件已下载', 'success');
-    resultModal.classList.remove('show');
+
+    try {
+        // Convert ArrayBuffer to base64 for Python API
+        const filesForSave = generatedFiles.map(f => ({
+            name: f.name,
+            base64: arrayBufferToBase64(f.data)
+        }));
+
+        const result = await window.pywebview.api.save_ico_from_base64(filesForSave);
+        if (result.success) {
+            showNotification('ICO 文件已保存', 'success');
+            resultModal.classList.remove('show');
+        } else {
+            showNotification(result.message || '保存失败', 'error');
+        }
+    } catch (error) {
+        showNotification('保存失败：' + error.message, 'error');
+    }
+}
+
+// ArrayBuffer to base64
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
 }
 
 // Package ZIP
