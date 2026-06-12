@@ -39,6 +39,7 @@ const aboutModal = document.getElementById('aboutModal');
 const resultModal = document.getElementById('resultModal');
 const resultContent = document.getElementById('resultContent');
 const customSizes = document.getElementById('customSizes');
+const outputFormat = document.getElementById('outputFormat');
 const colorMode = document.getElementById('colorMode');
 const resizeMode = document.getElementById('resizeMode');
 
@@ -58,9 +59,33 @@ const btnClose = document.getElementById('btnClose');
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     applyTheme(currentTheme);
+    autoDetectOs();
     bindEvents();
     updateUI();
+    updateGenerateButtonText();
 });
+
+// Auto-detect OS for default format
+async function autoDetectOs() {
+    // Try pywebview API first
+    if (window.pywebview && window.pywebview.api) {
+        try {
+            const osType = await window.pywebview.api.get_os_type();
+            if (osType === 'darwin') {
+                outputFormat.value = 'icns';
+                updateGenerateButtonText();
+            }
+            return;
+        } catch (e) {
+            // Fall through to browser detection
+        }
+    }
+    // Browser user-agent detection
+    if (navigator.platform && navigator.platform.toLowerCase().includes('mac')) {
+        outputFormat.value = 'icns';
+        updateGenerateButtonText();
+    }
+}
 
 // Bind events
 function bindEvents() {
@@ -142,6 +167,9 @@ function bindEvents() {
 
     // Generate ICO
     btnGenerateIco.addEventListener('click', generateIco);
+
+    // Format change
+    outputFormat.addEventListener('change', updateGenerateButtonText);
 
     // Theme toggle
     btnThemeToggle.addEventListener('click', toggleTheme);
@@ -247,6 +275,13 @@ function updateUI() {
     imageCount.textContent = uploadedImages.length;
     btnGenerateIco.disabled = uploadedImages.length === 0;
     btnPackageZip.disabled = uploadedImages.length === 0 || generatedFiles.length === 0;
+    updateGenerateButtonText();
+}
+
+// Update generate button text based on selected format
+function updateGenerateButtonText() {
+    const format = getSelectedFormat();
+    btnGenerateIco.innerHTML = `<span class="btn-icon">${icons.sparkles}</span><span>生成 ${format === 'icns' ? 'ICNS' : 'ICO'}</span>`;
 }
 
 // Handle dropped files
@@ -475,15 +510,134 @@ function buildIcoFile(iconImages) {
     
     // Image data
     for (const img of iconImages) {
-        for (let i = 0; i < img.data.length; i++) {
-            view.setUint8(offset++, img.data[i]);
-        }
+        new Uint8Array(buffer, offset).set(img.data);
+        offset += img.data.length;
     }
     
     return new Uint8Array(buffer);
 }
 
-// Generate ICO
+// ============================================
+// ICNS Format Support (macOS)
+// ============================================
+
+// Size to ICNS icon type code mapping
+function sizeToIcnsType(size) {
+    const map = {
+        16: 0x69637034,   // 'icp4'
+        32: 0x69637035,   // 'icp5'
+        64: 0x69637036,   // 'icp6'
+        128: 0x69633037,  // 'ic07'
+        256: 0x69633038,  // 'ic08'
+        512: 0x69633039,  // 'ic09'
+        1024: 0x69633130, // 'ic10'
+    };
+    return map[size] || 0x69633038; // default to 'ic08' (256x256)
+}
+
+// Canvas to PNG binary buffer (synchronous)
+function canvasToPngBuffer(canvas) {
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+// Build ICNS file from PNG icon entries
+function buildIcnsFile(iconImages) {
+    // ICNS header: 'icns' magic + total file size (big endian)
+    let totalSize = 8;
+    const entries = [];
+
+    for (const img of iconImages) {
+        const iconType = sizeToIcnsType(img.size);
+        const entrySize = 8 + img.data.length; // type(4) + entrySize(4) + PNG data
+        entries.push({ type: iconType, data: img.data, entrySize });
+        totalSize += entrySize;
+    }
+
+    const buffer = new ArrayBuffer(totalSize);
+    const view = new DataView(buffer);
+    let offset = 0;
+
+    // Header
+    view.setUint32(offset, 0x69636E73, false); // 'icns' magic
+    offset += 4;
+    view.setUint32(offset, totalSize, false); // Big endian total size
+    offset += 4;
+
+    // Icon entries
+    for (const entry of entries) {
+        view.setUint32(offset, entry.type, false); // 4-char OSType code
+        offset += 4;
+        view.setUint32(offset, entry.entrySize, false); // Big endian entry size
+        offset += 4;
+        // 批量复制 PNG 数据（比逐字节循环快得多）
+        new Uint8Array(buffer, offset).set(entry.data);
+        offset += entry.data.length;
+    }
+
+    return new Uint8Array(buffer);
+}
+
+// Create ICNS files from uploaded images
+async function createIcnsFile(images, sizes, colorModeValue, resizeModeValue, onProgress) {
+    const icnsImages = [];
+    // ICNS 仅支持标准尺寸，过滤非标准尺寸
+    const validSizes = sizes.filter(s => [16, 32, 64, 128, 256, 512, 1024].includes(s));
+    if (validSizes.length === 0) {
+        throw new Error('ICNS 格式仅支持 16, 32, 64, 128, 256, 512, 1024 尺寸');
+    }
+
+    for (let i = 0; i < images.length; i++) {
+        const imgData = images[i];
+        const img = await loadImage(imgData.preview);
+        const pngBuffers = [];
+
+        for (const size of validSizes) {
+            const canvas = resizeImage(img, size, resizeModeValue);
+            // 应用颜色模式：RGB 模式下抹掉 alpha 通道
+            if (colorModeValue === 'rgb') {
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+                for (let i = 3; i < pixels.length; i += 4) {
+                    pixels[i] = 255; // 设置 alpha 为完全不透明
+                }
+                ctx.putImageData(imageData, 0, 0);
+            }
+            const pngData = canvasToPngBuffer(canvas);
+            pngBuffers.push({ size: size, data: pngData });
+        }
+
+        // Build ICNS file
+        const icnsBuffer = buildIcnsFile(pngBuffers);
+        icnsImages.push({
+            name: imgData.name.replace(/\.[^/.]+$/, '') + '.icns',
+            data: icnsBuffer
+        });
+
+        if (onProgress) {
+            onProgress(i + 1, images.length);
+        }
+    }
+
+    return icnsImages;
+}
+
+// ============================================
+// Generate Icons (ICO or ICNS)
+// ============================================
+
+// Get selected output format
+function getSelectedFormat() {
+    return document.getElementById('outputFormat')?.value || 'ico';
+}
+
 async function generateIco() {
     const sizes = getSelectedSizes();
     if (sizes.length === 0) {
@@ -491,44 +645,64 @@ async function generateIco() {
         return;
     }
 
+    const format = getSelectedFormat();
+    const formatLabel = format === 'icns' ? 'ICNS' : 'ICO';
+
     btnGenerateIco.disabled = true;
     btnGenerateIco.innerHTML = `<span class="btn-icon">${icons.loader}</span><span>生成中...</span>`;
 
     showProgress(true, 0);
 
     try {
-        const icoFiles = await createIcoFile(
-            uploadedImages,
-            sizes,
-            colorMode.value,
-            resizeMode.value,
-            (current, total) => {
-                const pct = Math.round((current / total) * 100);
-                showProgress(true, pct, `正在处理 ${current}/${total} 张图片`);
-            }
-        );
+        let iconFiles;
+        if (format === 'icns') {
+            iconFiles = await createIcnsFile(
+                uploadedImages,
+                sizes,
+                colorMode.value,
+                resizeMode.value,
+                (current, total) => {
+                    const pct = Math.round((current / total) * 100);
+                    showProgress(true, pct, `正在处理 ${current}/${total} 张图片`);
+                }
+            );
+        } else {
+            iconFiles = await createIcoFile(
+                uploadedImages,
+                sizes,
+                colorMode.value,
+                resizeMode.value,
+                (current, total) => {
+                    const pct = Math.round((current / total) * 100);
+                    showProgress(true, pct, `正在处理 ${current}/${total} 张图片`);
+                }
+            );
+        }
 
-        generatedFiles = icoFiles.map((file, i) => ({
+        generatedFiles = iconFiles.map((file, i) => ({
             name: file.name,
             data: file.data,
-            sizes: sizes
+            sizes: sizes,
+            format: format
         }));
 
         showProgress(false);
         showResultModal(generatedFiles);
         updateUI();
-        showNotification('ICO 文件生成成功', 'success');
+        showNotification(`${formatLabel} 文件生成成功`, 'success');
     } catch (error) {
         showProgress(false);
         showNotification('生成失败：' + error.message, 'error');
     } finally {
         btnGenerateIco.disabled = false;
-        btnGenerateIco.innerHTML = `<span class="btn-icon">${icons.sparkles}</span><span>生成 ICO</span>`;
+        const format = getSelectedFormat();
+        btnGenerateIco.innerHTML = `<span class="btn-icon">${icons.sparkles}</span><span>生成 ${format === 'icns' ? 'ICNS' : 'ICO'}</span>`;
     }
 }
 
 // Show result modal
 function showResultModal(files) {
+    const formatLabel = files[0]?.format === 'icns' ? 'ICNS' : 'ICO';
     resultContent.innerHTML = `
         <div class="result-file-list" role="list" aria-label="生成的文件列表">
             ${files.map(f => `
@@ -541,7 +715,7 @@ function showResultModal(files) {
                 </div>
             `).join('')}
         </div>
-        <p style="color: var(--color-text-secondary); font-size: var(--font-size-base);">共生成 ${files.length} 个 ICO 文件</p>
+        <p style="color: var(--color-text-secondary); font-size: var(--font-size-base);">共生成 ${files.length} 个 ${formatLabel} 文件</p>
     `;
     resultModal.classList.add('show');
     btnSaveIco.focus();
@@ -556,6 +730,7 @@ async function saveIcoFiles() {
 
     // Check if running in pywebview environment
     const isPywebview = window.pywebview && window.pywebview.api;
+    const formatLabel = generatedFiles[0]?.format === 'icns' ? 'ICNS' : 'ICO';
 
     if (isPywebview) {
         // Use Python API in pywebview environment
@@ -567,7 +742,7 @@ async function saveIcoFiles() {
 
             const result = await window.pywebview.api.save_ico_from_base64(filesForSave);
             if (result.success) {
-                showNotification('ICO 文件已保存', 'success');
+                showNotification(`${formatLabel} 文件已保存`, 'success');
                 resultModal.classList.remove('show');
             } else {
                 showNotification(result.message || '保存失败', 'error');
@@ -577,8 +752,9 @@ async function saveIcoFiles() {
         }
     } else {
         // Use browser download in web environment
+        const mimeType = generatedFiles[0]?.format === 'icns' ? 'image/x-icns' : 'image/x-icon';
         for (const file of generatedFiles) {
-            const blob = new Blob([file.data], { type: 'image/x-icon' });
+            const blob = new Blob([file.data], { type: mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -588,7 +764,7 @@ async function saveIcoFiles() {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
-        showNotification('ICO 文件已下载', 'success');
+        showNotification(`${formatLabel} 文件已下载`, 'success');
         resultModal.classList.remove('show');
     }
 }
@@ -606,7 +782,7 @@ function arrayBufferToBase64(buffer) {
 // Package ZIP
 async function packageZip() {
     if (generatedFiles.length === 0) {
-        showNotification('请先生成 ICO 文件', 'error');
+        showNotification('请先生成图标文件', 'error');
         return;
     }
 

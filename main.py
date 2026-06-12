@@ -9,6 +9,7 @@ import zipfile
 import tempfile
 import shutil
 import atexit
+import platform
 
 
 class Api:
@@ -238,6 +239,37 @@ class Api:
 
         return header + bytes(xor_mask) + and_mask
 
+    @staticmethod
+    def _resize_image(img, size, resize_mode, color_mode):
+        """根据缩放模式和颜色模式调整图像尺寸（共享方法）"""
+        if resize_mode == 'stretch':
+            # 拉伸：忽略比例，直接缩放到目标尺寸
+            resized = img.resize((size, size), Image.Resampling.LANCZOS)
+        elif resize_mode == 'fit':
+            # 适应：保持比例，居中放置，多余部分透明
+            resized = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+            temp = img.copy()
+            temp.thumbnail((size, size), Image.Resampling.LANCZOS)
+            x = (size - temp.width) // 2
+            y = (size - temp.height) // 2
+            if temp.mode == 'RGBA':
+                resized.paste(temp, (x, y), temp)
+            else:
+                resized.paste(temp, (x, y))
+            temp.close()
+        else:
+            # 填充：居中裁剪为正方形后再缩放（默认）
+            min_side = min(img.width, img.height)
+            left = (img.width - min_side) // 2
+            top = (img.height - min_side) // 2
+            cropped = img.crop((left, top, left + min_side, top + min_side))
+            resized = cropped.resize((size, size), Image.Resampling.LANCZOS)
+            cropped.close()
+
+        if color_mode == 'rgb':
+            resized = resized.convert('RGB')
+        return resized
+
     def generate_ico(self, sizes, color_mode='rgba', resize_mode='cover'):
         """生成ICO文件"""
         if not self.uploaded_images:
@@ -258,32 +290,7 @@ class Api:
                             img = img.convert('RGBA')
 
                         for size in sorted(size_list, reverse=True):
-                            if resize_mode == 'stretch':
-                                # 拉伸：忽略比例，直接缩放到目标尺寸
-                                resized = img.resize((size, size), Image.Resampling.LANCZOS)
-                            elif resize_mode == 'fit':
-                                # 适应：保持比例，居中放置，多余部分透明
-                                resized = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-                                temp = img.copy()
-                                temp.thumbnail((size, size), Image.Resampling.LANCZOS)
-                                x = (size - temp.width) // 2
-                                y = (size - temp.height) // 2
-                                if temp.mode == 'RGBA':
-                                    resized.paste(temp, (x, y), temp)
-                                else:
-                                    resized.paste(temp, (x, y))
-                                temp.close()
-                            else:
-                                # 填充：居中裁剪为正方形后再缩放（默认）
-                                min_side = min(img.width, img.height)
-                                left = (img.width - min_side) // 2
-                                top = (img.height - min_side) // 2
-                                cropped = img.crop((left, top, left + min_side, top + min_side))
-                                resized = cropped.resize((size, size), Image.Resampling.LANCZOS)
-                                cropped.close()
-
-                            if color_mode == 'rgb':
-                                resized = resized.convert('RGB')
+                            resized = self._resize_image(img, size, resize_mode, color_mode)
                             icon_images.append(resized)
 
                         output_name = os.path.splitext(img_info['name'])[0] + '.ico'
@@ -364,16 +371,134 @@ class Api:
         except:
             pass
 
+    def get_os_type(self):
+        """获取当前操作系统类型"""
+        system = platform.system().lower()
+        if system == 'windows':
+            return 'win32'
+        elif system == 'darwin':
+            return 'darwin'
+        else:
+            return 'linux'
+
+    def _create_icns(self, icon_images, output_path):
+        """构建 ICNS 格式图标文件"""
+        # ICNS 格式: header(8B) + icon entry(8B + PNG数据) * N
+        # header: magic 'icns' + total file size (big-endian uint32)
+
+        # 尺寸到 ICNS 类型码映射
+        size_to_type = {
+            16: b'icp4',
+            32: b'icp5',
+            64: b'icp6',
+            128: b'ic07',
+            256: b'ic08',
+            512: b'ic09',
+            1024: b'ic10',
+        }
+
+        entries = bytearray()
+        data_entries = []
+
+        for img in icon_images:
+            size = img.width  # 假设是正方形
+            icon_type = size_to_type.get(size, b'ic08')
+
+            # 将图像保存为 PNG
+            buf = BytesIO()
+            # 确保是 RGBA 模式
+            if img.mode != 'RGBA':
+                png_img = img.convert('RGBA')
+            else:
+                png_img = img
+            png_img.save(buf, format='PNG')
+            png_data = buf.getvalue()
+
+            entry_header = icon_type + struct.pack('>I', 8 + len(png_data))
+            entries.extend(entry_header)
+            data_entries.append(png_data)
+
+        # 构建完整 ICNS 文件
+        total_size = 8 + len(entries) + sum(len(d) for d in data_entries)
+        icns_data = bytearray()
+        icns_data.extend(b'icns')
+        icns_data.extend(struct.pack('>I', total_size))
+        icns_data.extend(entries)
+        for data in data_entries:
+            icns_data.extend(data)
+
+        with open(output_path, 'wb') as f:
+            f.write(icns_data)
+
+    def generate_icns(self, sizes, color_mode='rgba', resize_mode='cover'):
+        """生成 ICNS 文件"""
+        if not self.uploaded_images:
+            return {'success': False, 'message': '请先添加图片'}
+
+        try:
+            size_list = [int(s) for s in sizes if s and int(s) in (16, 32, 64, 128, 256, 512, 1024)]
+            if not size_list:
+                return {'success': False, 'message': 'ICNS 格式仅支持 16, 32, 64, 128, 256, 512, 1024 尺寸'}
+
+            results = []
+            for img_info in self.uploaded_images:
+                img = None
+                icon_images = []
+                try:
+                    with Image.open(img_info['path']) as img:
+                        if img.mode != 'RGBA':
+                            img = img.convert('RGBA')
+
+                        for size in sorted(size_list, reverse=True):
+                            resized = self._resize_image(img, size, resize_mode, color_mode)
+                            icon_images.append(resized)
+
+                        output_name = os.path.splitext(img_info['name'])[0] + '.icns'
+                        output_path = os.path.join(self.temp_dir, output_name)
+                        self._create_icns(icon_images, output_path)
+
+                        results.append({
+                            'name': output_name,
+                            'path': output_path,
+                            'sizes': sorted(size_list, reverse=True)
+                        })
+                finally:
+                    for icon_img in icon_images:
+                        icon_img.close()
+
+            return {'success': True, 'files': results}
+        except Exception as e:
+            import traceback
+            return {'success': False, 'message': f'生成失败: {str(e)}\n{traceback.format_exc()}'}
+
 
 def get_center_position(width, height):
-    """计算窗口居中位置"""
+    """计算窗口居中位置（跨平台）"""
+    import platform
+    system = platform.system()
     try:
-        import ctypes
-        # 获取屏幕宽高
-        user32 = ctypes.windll.user32
-        screen_width = user32.GetSystemMetrics(0)
-        screen_height = user32.GetSystemMetrics(1)
-        # 计算居中位置
+        if system == 'Windows':
+            import ctypes
+            user32 = ctypes.windll.user32
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
+        elif system == 'Darwin':
+            # macOS: 使用 tkinter 获取屏幕尺寸，用 withdraw() 防止窗口闪烁
+            import tkinter as tk
+            root = tk.Tk()
+            root.withdraw()  # 隐藏窗口，避免显示和焦点抢占
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            root.destroy()
+        else:
+            # Linux 及其他平台
+            import tkinter as tk
+            root = tk.Tk()
+            root.withdraw()
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            root.destroy()
+
         x = (screen_width - width) // 2
         y = (screen_height - height) // 2
         return x, y
