@@ -83,6 +83,10 @@ class Api:
             img_id = len(self.uploaded_images)
         try:
             with Image.open(path) as img:
+                width, height = img.size
+                if width * height > Image.MAX_IMAGE_PIXELS:
+                    print(f"处理图片失败: {path}, 错误: 图片尺寸超出安全限制")
+                    return None
                 img.thumbnail((100, 100))
                 buffered = BytesIO()
                 img.save(buffered, format="PNG")
