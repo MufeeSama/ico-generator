@@ -109,8 +109,7 @@ pyinstaller --clean icon_generator.spec
 - **Python**：3.8+（仅运行源码时需要）
 
 ## 许可证
-
-MIT License
+Apache License 2.0
 
 ## 致谢
 
