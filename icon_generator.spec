@@ -1,4 +1,4 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 
 import os
 import sys
@@ -27,9 +27,6 @@ if sys.platform == 'win32':
         'pycparser.yacctab',
     ]
 elif sys.platform == 'darwin':
-    # macOS: 使用 WebKit（系统自带），无需 pythonnet/clr
-    # tkinter 用于 get_center_position() 获取屏幕尺寸（动态导入，需显式添加）
-    # PyObjC 用于 Cocoa 集成（pywebview macOS 后端所需）
     hiddenimports = [
         'webview',
         'PIL',
@@ -43,7 +40,6 @@ elif sys.platform == 'darwin':
         'CoreFoundation',
     ]
 else:
-    # Linux 及其他
     hiddenimports = [
         'webview',
         'PIL',
@@ -54,7 +50,6 @@ else:
 # 平台专属排除项
 if sys.platform == 'win32':
     excludes = [
-        # 排除 PyQt - webview 可能自动检测并引入
         'PyQt6',
         'PyQt6.QtCore',
         'PyQt6.QtGui',
@@ -66,42 +61,33 @@ if sys.platform == 'win32':
         'PyQt5',
         'PySide6',
         'PySide2',
-        # 排除 numpy
         'numpy',
         'numpy.core',
-        # 排除其他大型库
         'cryptography',
         'charset_normalizer',
         'jinja2',
         'markupsafe',
-        # 排除测试和文档
         'unittest',
         'test',
         'pydoc',
         'pydoc_data',
-        # 排除 tkinter
         'tkinter',
         'Tkinter',
-        # 排除其他 GUI 框架
         'gtk',
         'gi',
         'wx',
         'wxPython',
         'curses',
-        # 排除开发工具
         'setuptools',
         'pkg_resources',
         'wheel',
         'pip',
-        # 排除网络库（除必要的）
         'requests',
         'urllib3',
         'certifi',
         'idna',
-        # 注意：cffi 和 pycparser 不能排除，pythonnet 需要它们
     ]
 else:
-    # macOS/Linux: 无需排除 Windows 专属 GUI 框架
     excludes = [
         'numpy',
         'cryptography',
@@ -120,7 +106,6 @@ else:
         'urllib3',
         'certifi',
         'idna',
-        # macOS 上避免误检测 Windows 库
         'clr',
         'pythonnet',
         'clr_loader',
@@ -154,7 +139,6 @@ if sys.platform == 'win32':
         'numpy',
     ]
 else:
-    # macOS/Linux: 不存在 Qt6/Qt5 DLL，无需额外过滤
     binaries_to_exclude = [
         'numpy',
     ]
@@ -163,11 +147,7 @@ a.binaries = [b for b in a.binaries if not any(excl in b[0] for excl in binaries
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# macOS 打包为 .app 而非 .exe
 exe_name = 'ICO生成器'
-if sys.platform == 'darwin':
-    # macOS 使用 BUNDLE() 包裹 EXE() 生成 .app 包
-    pass
 
 # 检查是否有图标文件
 icon_path = None
@@ -176,7 +156,6 @@ if os.path.exists('icon.ico') and sys.platform == 'win32':
 elif os.path.exists('icon.icns') and sys.platform == 'darwin':
     icon_path = 'icon.icns'
 
-# macOS 上 UPX 不可用，仅 Windows 启用
 use_upx = sys.platform == 'win32'
 
 exe = EXE(
@@ -201,13 +180,10 @@ exe = EXE(
     icon=icon_path,
 )
 
-# macOS: 用 BUNDLE() 创建 .app 包结构
+# macOS: 单文件 EXE 已包含 binaries 与 datas，BUNDLE 仅需包裹 exe 避免重复打包
 if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
-        a.binaries,
-        a.datas,
-        [],
         name=exe_name + '.app',
         icon=icon_path,
         bundle_identifier='com.ico-generator.app',

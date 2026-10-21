@@ -1,58 +1,139 @@
-import webview
-import os
-import sys
-import json
-import base64
-import struct
-from io import BytesIO
-from PIL import Image
-import zipfile
-import tempfile
-import shutil
 import atexit
+import base64
+from io import BytesIO
+import os
 import platform
+import re
+import shutil
+import struct
+import sys
+import tempfile
+import traceback
+import zipfile
+from PIL import Image
+
+try:
+    import webview
+except ImportError:
+    webview = None
+
+
+VALID_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.tiff', '.ico')
+ICNS_SUPPORTED_SIZES = (16, 32, 64, 128, 256, 512, 1024)
+MIN_ICON_SIZE = 1
+MAX_ICON_SIZE = 1024
 
 
 class Api:
     def __init__(self):
-        self.temp_dir = tempfile.mkdtemp()
+        self.temp_dir = tempfile.mkdtemp(prefix='ico_gen_')
+        self.upload_dir = os.path.join(self.temp_dir, 'uploads')
+        os.makedirs(self.upload_dir, exist_ok=True)
         self.uploaded_images = []
-        self._window = None  # 私有属性，避免 COM 错误
+        self._window = None  # 私有属性，避免 pywebview 序列化窗口对象导致 COM 错误
         atexit.register(self._cleanup_on_exit)
 
     def set_window(self, window):
         """设置窗口引用"""
         self._window = window
 
+    def _get_active_window(self):
+        """安全获取当前活动窗口"""
+        if self._window is not None:
+            return self._window
+        if webview is not None and getattr(webview, 'windows', None):
+            return webview.windows[0]
+        return None
+
     def minimize_window(self):
         """最小化窗口"""
-        if self._window:
-            self._window.minimize()
+        win = self._get_active_window()
+        if win:
+            win.minimize()
+            return {'success': True}
+        return {'success': False, 'message': '窗口未初始化'}
 
     def close_window(self):
         """关闭窗口"""
-        if self._window:
-            self._window.destroy()
+        win = self._get_active_window()
+        if win:
+            win.destroy()
+            return {'success': True}
+        return {'success': False, 'message': '窗口未初始化'}
 
     def _cleanup_on_exit(self):
         """程序退出时自动清理临时文件"""
         try:
-            shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except:
+            if os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+        except Exception:
             pass
+
+    @staticmethod
+    def _sanitize_filename(name, default_name='icon.ico'):
+        """净化文件名，防止路径遍历攻击与非法字符"""
+        if not name or not isinstance(name, str):
+            return default_name
+        # 统一分隔符并提取基名
+        normalized = name.replace('\\', '/').split('/')[-1]
+        # 过滤控制字符与 Windows/Unix 非法文件名字符
+        cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', normalized).strip(' .')
+        if not cleaned or cleaned in ('.', '..'):
+            return default_name
+        return cleaned
+
+    @staticmethod
+    def _get_unique_filename(stem, ext, used_names):
+        """生成不重复的文件名，防止同名图片互相覆盖"""
+        safe_stem = Api._sanitize_filename(stem, default_name='icon')
+        if not ext.startswith('.'):
+            ext = '.' + ext
+        candidate = f'{safe_stem}{ext}'
+        counter = 1
+        while candidate.lower() in used_names:
+            candidate = f'{safe_stem}_{counter}{ext}'
+            counter += 1
+        used_names.add(candidate.lower())
+        return candidate
+
+    @staticmethod
+    def _safe_join(base_dir, filename):
+        """安全拼接路径并校验目标路径位于基准目录内"""
+        safe_name = Api._sanitize_filename(filename)
+        base_abs = os.path.abspath(base_dir)
+        target_abs = os.path.abspath(os.path.join(base_abs, safe_name))
+        if os.path.commonpath([base_abs, target_abs]) != base_abs:
+            raise ValueError(f'非法文件路径: {filename}')
+        return target_abs
+
+    @staticmethod
+    def _parse_sizes(sizes, valid_set=None):
+        """解析并校验尺寸列表（限制在 1~1024 之间并去重排序）"""
+        parsed = []
+        for s in sizes or []:
+            try:
+                val = int(s)
+            except (ValueError, TypeError):
+                continue
+            if MIN_ICON_SIZE <= val <= MAX_ICON_SIZE:
+                if valid_set is None or val in valid_set:
+                    parsed.append(val)
+        return sorted(set(parsed), reverse=True)
 
     def select_images(self):
         """打开文件对话框选择图片"""
-        result = webview.windows[0].create_file_dialog(
+        win = self._get_active_window()
+        if not win:
+            return {'success': False, 'message': '窗口未初始化'}
+        result = win.create_file_dialog(
             webview.OPEN_DIALOG,
             allow_multiple=True,
-            file_types=('Image Files (*.png;*.jpg;*.jpeg;*.bmp;*.gif)',)
+            file_types=('Image Files (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp;*.tiff;*.ico)',)
         )
         if result:
             images = []
-            start_id = len(self.uploaded_images)
-            for i, path in enumerate(result):
-                img_info = self._process_image(path, start_id + i)
+            for path in result:
+                img_info = self._process_image(path, len(self.uploaded_images) + len(images))
                 if img_info:
                     images.append(img_info)
             self.uploaded_images.extend(images)
@@ -61,47 +142,80 @@ class Api:
 
     def select_folder(self):
         """打开文件夹对话框选择目录"""
-        result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        win = self._get_active_window()
+        if not win:
+            return {'success': False, 'message': '窗口未初始化'}
+        result = win.create_file_dialog(webview.FOLDER_DIALOG)
         if result and len(result) > 0:
             folder_path = result[0]
             images = []
-            start_id = len(self.uploaded_images)
-            valid_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif')
-            for i, filename in enumerate(os.listdir(folder_path)):
-                if filename.lower().endswith(valid_extensions):
+            for filename in sorted(os.listdir(folder_path)):
+                if filename.lower().endswith(VALID_IMAGE_EXTENSIONS):
                     path = os.path.join(folder_path, filename)
-                    img_info = self._process_image(path, start_id + len(images))
-                    if img_info:
-                        images.append(img_info)
+                    if os.path.isfile(path):
+                        img_info = self._process_image(path, len(self.uploaded_images) + len(images))
+                        if img_info:
+                            images.append(img_info)
             self.uploaded_images.extend(images)
             return {'success': True, 'images': images, 'total': len(self.uploaded_images)}
         return {'success': False, 'message': '未选择文件夹'}
 
-    def _process_image(self, path, img_id=None):
-        """处理图片文件，返回图片信息"""
+    def add_base64_images(self, items):
+        """接收前端拖放或文件选择器读取的 base64 图片并同步到后端"""
+        if not items:
+            return {'success': False, 'message': '未提供图片数据'}
+        used_names = {os.path.basename(img['path']).lower() for img in self.uploaded_images}
+        added = []
+        for item in items:
+            try:
+                raw_name = item.get('name') or 'image.png'
+                preview = item.get('preview') or item.get('base64') or ''
+                if ',' in preview:
+                    preview = preview.split(',', 1)[1]
+                data = base64.b64decode(preview)
+                stem, ext = os.path.splitext(self._sanitize_filename(raw_name, 'image.png'))
+                if not ext:
+                    ext = '.png'
+                unique_name = self._get_unique_filename(stem, ext, used_names)
+                save_path = self._safe_join(self.upload_dir, unique_name)
+                with open(save_path, 'wb') as fp:
+                    fp.write(data)
+                img_info = self._process_image(save_path, len(self.uploaded_images) + len(added), display_name=raw_name)
+                if img_info:
+                    added.append(img_info)
+            except Exception as e:
+                print(f"同步图片失败: {item.get('name')}, 错误: {e}")
+        self.uploaded_images.extend(added)
+        return {'success': True, 'images': added, 'total': len(self.uploaded_images)}
+
+    def _process_image(self, path, img_id=None, display_name=None):
+        """处理图片文件，返回图片信息与缩略图"""
         if img_id is None:
             img_id = len(self.uploaded_images)
         try:
             with Image.open(path) as img:
-                img.thumbnail((100, 100))
+                thumb = img.copy()
+                thumb.thumbnail((100, 100), Image.Resampling.LANCZOS)
                 buffered = BytesIO()
-                img.save(buffered, format="PNG")
-                img_str = base64.b64encode(buffered.getvalue()).decode()
+                thumb.save(buffered, format='PNG')
+                thumb.close()
+                img_str = base64.b64encode(buffered.getvalue()).decode('ascii')
 
+                raw_name = display_name if display_name else os.path.basename(path)
                 return {
                     'id': img_id,
                     'path': path,
-                    'name': os.path.basename(path),
+                    'name': self._sanitize_filename(raw_name, 'image.png'),
                     'preview': f'data:image/png;base64,{img_str}'
                 }
         except Exception as e:
-            print(f"处理图片失败: {path}, 错误: {e}")
+            print(f'处理图片失败: {path}, 错误: {e}')
             return None
 
     def clear_images(self):
         """清除所有已添加的图片"""
         self.uploaded_images = []
-        return {'success': True}
+        return {'success': True, 'total': 0}
 
     def get_images(self):
         """获取当前已添加的图片列表（用于前后端状态同步）"""
@@ -109,48 +223,56 @@ class Api:
 
     def remove_image(self, index):
         """移除指定索引的图片"""
-        if 0 <= index < len(self.uploaded_images):
-            self.uploaded_images.pop(index)
-            # 重新编号
+        try:
+            idx = int(index)
+        except (ValueError, TypeError):
+            return {'success': False, 'message': '索引无效'}
+        if 0 <= idx < len(self.uploaded_images):
+            self.uploaded_images.pop(idx)
             for i, img in enumerate(self.uploaded_images):
                 img['id'] = i
             return {'success': True, 'total': len(self.uploaded_images)}
         return {'success': False, 'message': '索引无效'}
 
     def _create_bmp_ico(self, icon_images, output_path):
-        """手动构建BMP格式的ICO文件，确保Windows兼容性"""
-        # ICO文件头
-        ico_header = struct.pack('<HHH', 0, 1, len(icon_images))  # 保留, 类型(1=ICO), 图像数量
+        """手动构建 ICO 文件：<=256px 采用标准 BMP(DIB) 格式，>256px 采用 PNG 流格式以避免体积膨胀与头部冲突"""
+        ico_header = struct.pack('<HHH', 0, 1, len(icon_images))
 
-        # 计算目录项和数据偏移
-        dir_entries = b''
+        dir_entries = bytearray()
         image_data_list = []
-        data_offset = 6 + 16 * len(icon_images)  # 头(6字节) + 目录项(16字节/图像)
+        data_offset = 6 + 16 * len(icon_images)
 
         for img in icon_images:
-            width = img.width if img.width < 256 else 0
-            height = img.height if img.height < 256 else 0
+            width_byte = img.width if img.width < 256 else 0
+            height_byte = img.height if img.height < 256 else 0
+            bpp = 32 if img.mode == 'RGBA' else 24
 
-            # 将图像转换为BMP格式（包含XOR和AND掩码）
-            if img.mode == 'RGBA':
-                # 32位带透明
-                bmp_data = self._create_32bit_bmp(img)
+            if img.width > 256 or img.height > 256:
+                # Windows Vista+ ICO 规范：大于 256px 的超高分辨率图标使用 PNG 流存储
+                buf = BytesIO()
+                img.save(buf, format='PNG')
+                entry_data = buf.getvalue()
             else:
-                # 24位无透明
-                bmp_data = self._create_24bit_bmp(img)
+                if img.mode == 'RGBA':
+                    entry_data = self._create_32bit_bmp(img)
+                else:
+                    entry_data = self._create_24bit_bmp(img)
 
-            # 目录项: 宽度, 高度, 颜色数, 保留, 颜色平面, 位深度, 数据大小, 数据偏移
-            dir_entries += struct.pack('<BBBBHHII',
-                width, height, 0, 0, 1,  # 宽度, 高度, 颜色数, 保留, 颜色平面
-                32 if img.mode == 'RGBA' else 24,  # 位深度
-                len(bmp_data),  # 数据大小
-                data_offset  # 数据偏移
-            )
+            dir_entries.extend(struct.pack(
+                '<BBBBHHII',
+                width_byte,
+                height_byte,
+                0,
+                0,
+                1,
+                bpp,
+                len(entry_data),
+                data_offset
+            ))
 
-            image_data_list.append(bmp_data)
-            data_offset += len(bmp_data)
+            image_data_list.append(entry_data)
+            data_offset += len(entry_data)
 
-        # 写入ICO文件
         with open(output_path, 'wb') as f:
             f.write(ico_header)
             f.write(dir_entries)
@@ -158,150 +280,166 @@ class Api:
                 f.write(data)
 
     def _create_32bit_bmp(self, img):
-        """创建32位BMP图像数据（BGRA格式）"""
+        """创建 32 位 BMP 图像数据（BGRA 格式 + 1位透明 AND 掩码，采用 Pillow C 扩展加速）"""
         width, height = img.size
-        # BMP数据: 位图信息头 + XOR掩码 + AND掩码
-        # 对于32位图像，AND掩码是可选的，因为alpha通道已经包含透明度
+        flipped = img.convert('RGBA').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
-        # BITMAPINFOHEADER (40字节)
-        header = struct.pack('<IiiHHIIiiII',
-            40,  # 头大小
-            width,  # 宽度
-            height * 2,  # 高度（XOR和AND掩码的总高度）
-            1,  # 颜色平面
-            32,  # 位深度
-            0,  # 压缩方式（0=无压缩）
-            0,  # 图像大小（可以为0）
-            0, 0,  # 分辨率
-            0, 0  # 颜色数
+        # 使用 Pillow 原生 raw BGRA 编码替代 Python 双重循环（32位每行恒为 4 字节对齐）
+        xor_mask = flipped.tobytes('raw', 'BGRA')
+
+        # 构建 1 位 AND 掩码（alpha < 128 设为 1 表示透明，>= 128 设为 0 表示不透明）
+        alpha = flipped.getchannel('A')
+        mask_1bit = alpha.point(lambda a: 255 if a < 128 else 0, mode='1')
+        raw_1bit = mask_1bit.tobytes()
+        row_bytes = (width + 7) // 8
+        and_row_size = ((width + 31) // 32) * 4
+        pad_len = and_row_size - row_bytes
+
+        if pad_len == 0:
+            and_mask = raw_1bit
+        else:
+            pad_bytes = b'\x00' * pad_len
+            and_rows = [
+                raw_1bit[y * row_bytes:(y + 1) * row_bytes] + pad_bytes
+                for y in range(height)
+            ]
+            and_mask = b''.join(and_rows)
+
+        flipped.close()
+        total_image_size = len(xor_mask) + len(and_mask)
+
+        header = struct.pack(
+            '<IiiHHIIiiII',
+            40,
+            width,
+            height * 2,
+            1,
+            32,
+            0,
+            total_image_size,
+            2835,
+            2835,
+            0,
+            0
         )
 
-        # XOR掩码（BGRA格式，自下而上）
-        pixels = img.convert('RGBA').tobytes()
-        # 转换为BGRA
-        bgra = bytearray()
-        for y in range(height - 1, -1, -1):  # 自下而上
-            for x in range(width):
-                idx = (y * width + x) * 4
-                r, g, b, a = pixels[idx], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3]
-                bgra.extend([b, g, r, a])
-
-        # 行填充（32位图像每行必须是4字节对齐）
-        row_size = width * 4
-        padding = (4 - row_size % 4) % 4
-
-        xor_mask = bytearray()
-        for y in range(height):
-            row_start = y * width * 4
-            xor_mask.extend(bgra[row_start:row_start + row_size])
-            xor_mask.extend([0] * padding)
-
-        # AND掩码（1位单色，用于透明）- 对于32位图像，可以省略或全0
-        and_mask = bytes((height * ((width + 31) // 32) * 4))
-
-        return header + bytes(xor_mask) + and_mask
+        return header + xor_mask + and_mask
 
     def _create_24bit_bmp(self, img):
-        """创建24位BMP图像数据（BGR格式）"""
+        """创建 24 位 BMP 图像数据（BGR 格式，采用 Pillow C 扩展加速）"""
         width, height = img.size
+        flipped = img.convert('RGB').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        raw_bgr = flipped.tobytes('raw', 'BGR')
+        flipped.close()
 
-        # BITMAPINFOHEADER (40字节)
-        header = struct.pack('<IiiHHIIiiII',
-            40,  # 头大小
-            width,  # 宽度
-            height * 2,  # 高度
-            1,  # 颜色平面
-            24,  # 位深度
-            0,  # 压缩方式
-            0,  # 图像大小
-            0, 0,  # 分辨率
-            0, 0  # 颜色数
-        )
-
-        # 转换为BGR格式
-        rgb_img = img.convert('RGB')
-        pixels = rgb_img.tobytes()
-
-        # 行填充（24位图像每行必须是4字节对齐）
         row_size = width * 3
         padding = (4 - row_size % 4) % 4
 
-        # XOR掩码（BGR格式，自下而上）
-        xor_mask = bytearray()
-        for y in range(height - 1, -1, -1):  # 自下而上
-            for x in range(width):
-                idx = (y * width + x) * 3
-                r, g, b = pixels[idx], pixels[idx + 1], pixels[idx + 2]
-                xor_mask.extend([b, g, r])
-            xor_mask.extend([0] * padding)
+        if padding == 0:
+            xor_mask = raw_bgr
+        else:
+            pad_bytes = b'\x00' * padding
+            xor_rows = [
+                raw_bgr[y * row_size:(y + 1) * row_size] + pad_bytes
+                for y in range(height)
+            ]
+            xor_mask = b''.join(xor_rows)
 
-        # AND掩码（全0，表示不透明）
-        and_mask = bytes((height * ((width + 31) // 32) * 4))
+        and_mask = bytes(height * ((width + 31) // 32) * 4)
+        total_image_size = len(xor_mask) + len(and_mask)
 
-        return header + bytes(xor_mask) + and_mask
+        header = struct.pack(
+            '<IiiHHIIiiII',
+            40,
+            width,
+            height * 2,
+            1,
+            24,
+            0,
+            total_image_size,
+            2835,
+            2835,
+            0,
+            0
+        )
+
+        return header + xor_mask + and_mask
 
     @staticmethod
     def _resize_image(img, size, resize_mode, color_mode):
-        """根据缩放模式和颜色模式调整图像尺寸（共享方法）"""
-        if resize_mode == 'stretch':
-            # 拉伸：忽略比例，直接缩放到目标尺寸
-            resized = img.resize((size, size), Image.Resampling.LANCZOS)
-        elif resize_mode == 'fit':
-            # 适应：保持比例，居中放置，多余部分透明
-            resized = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-            temp = img.copy()
-            temp.thumbnail((size, size), Image.Resampling.LANCZOS)
-            x = (size - temp.width) // 2
-            y = (size - temp.height) // 2
-            if temp.mode == 'RGBA':
-                resized.paste(temp, (x, y), temp)
-            else:
-                resized.paste(temp, (x, y))
-            temp.close()
+        """根据缩放模式和颜色模式调整图像尺寸（RGB 模式下自动在白色背景上合成透明度）"""
+        if img.mode != 'RGBA':
+            src = img.convert('RGBA')
+            should_close_src = True
         else:
-            # 填充：居中裁剪为正方形后再缩放（默认）
-            min_side = min(img.width, img.height)
-            left = (img.width - min_side) // 2
-            top = (img.height - min_side) // 2
-            cropped = img.crop((left, top, left + min_side, top + min_side))
-            resized = cropped.resize((size, size), Image.Resampling.LANCZOS)
-            cropped.close()
+            src = img
+            should_close_src = False
 
-        if color_mode == 'rgb':
-            resized = resized.convert('RGB')
-        return resized
+        try:
+            if resize_mode == 'stretch':
+                resized = src.resize((size, size), Image.Resampling.LANCZOS)
+            elif resize_mode == 'fit':
+                resized = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+                temp = src.copy()
+                temp.thumbnail((size, size), Image.Resampling.LANCZOS)
+                x = (size - temp.width) // 2
+                y = (size - temp.height) // 2
+                resized.paste(temp, (x, y), temp)
+                temp.close()
+            else:
+                min_side = min(src.width, src.height)
+                left = (src.width - min_side) // 2
+                top = (src.height - min_side) // 2
+                cropped = src.crop((left, top, left + min_side, top + min_side))
+                resized = cropped.resize((size, size), Image.Resampling.LANCZOS)
+                cropped.close()
+
+            if color_mode == 'rgb':
+                # 在白色背景上执行 Alpha 合成，避免透明区域及留白边变成纯黑色
+                white_bg = Image.new('RGB', (size, size), (255, 255, 255))
+                white_bg.paste(resized, (0, 0), resized)
+                resized.close()
+                return white_bg
+
+            return resized
+        finally:
+            if should_close_src:
+                src.close()
 
     def generate_ico(self, sizes, color_mode='rgba', resize_mode='cover'):
-        """生成ICO文件"""
+        """批量生成 ICO 文件"""
         if not self.uploaded_images:
             return {'success': False, 'message': '请先添加图片'}
 
         try:
-            size_list = [int(s) for s in sizes if s]
+            size_list = self._parse_sizes(sizes)
             if not size_list:
-                return {'success': False, 'message': '请选择至少一个尺寸'}
+                return {'success': False, 'message': f'请选择至少一个有效尺寸（{MIN_ICON_SIZE}~{MAX_ICON_SIZE}px）'}
 
             results = []
+            used_names = set()
             for img_info in self.uploaded_images:
-                img = None
                 icon_images = []
                 try:
                     with Image.open(img_info['path']) as img:
-                        if img.mode != 'RGBA':
-                            img = img.convert('RGBA')
-
-                        for size in sorted(size_list, reverse=True):
+                        for size in size_list:
                             resized = self._resize_image(img, size, resize_mode, color_mode)
                             icon_images.append(resized)
 
-                        output_name = os.path.splitext(img_info['name'])[0] + '.ico'
-                        output_path = os.path.join(self.temp_dir, output_name)
+                        stem = os.path.splitext(img_info['name'])[0]
+                        output_name = self._get_unique_filename(stem, '.ico', used_names)
+                        output_path = self._safe_join(self.temp_dir, output_name)
                         self._create_bmp_ico(icon_images, output_path)
+
+                        with open(output_path, 'rb') as fp:
+                            b64_data = base64.b64encode(fp.read()).decode('ascii')
 
                         results.append({
                             'name': output_name,
                             'path': output_path,
-                            'sizes': sorted(size_list, reverse=True)
+                            'sizes': size_list,
+                            'format': 'ico',
+                            'base64': b64_data
                         })
                 finally:
                     for icon_img in icon_images:
@@ -309,58 +447,103 @@ class Api:
 
             return {'success': True, 'files': results}
         except Exception as e:
-            import traceback
             return {'success': False, 'message': f'生成失败: {str(e)}\n{traceback.format_exc()}'}
 
     def save_ico_from_base64(self, files):
-        """从 base64 数据保存 ICO 文件到用户选择的位置"""
+        """从 base64 数据保存图标文件到用户选择的文件夹"""
         if not files:
             return {'success': False, 'message': '没有可保存的文件'}
-        result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        win = self._get_active_window()
+        if not win:
+            return {'success': False, 'message': '窗口未初始化'}
+        result = win.create_file_dialog(webview.FOLDER_DIALOG)
         if not result or len(result) == 0:
             return {'success': False, 'message': '未选择保存位置'}
         folder = result[0]
         try:
+            used_names = set()
             for f in files:
+                raw_name = self._sanitize_filename(f.get('name', 'icon.ico'))
+                stem, ext = os.path.splitext(raw_name)
+                unique_name = self._get_unique_filename(stem, ext or '.ico', used_names)
+                dst = self._safe_join(folder, unique_name)
                 data = base64.b64decode(f['base64'])
-                dst = os.path.join(folder, f['name'])
                 with open(dst, 'wb') as fp:
                     fp.write(data)
-            return {'success': True}
+            return {'success': True, 'path': folder}
+        except Exception as e:
+            return {'success': False, 'message': f'保存失败: {str(e)}'}
+
+    def save_zip_from_base64(self, base64_data, default_name='icons.zip'):
+        """将前端打包的 ZIP base64 数据通过系统对话框保存到本地"""
+        if not base64_data:
+            return {'success': False, 'message': '没有可保存的 ZIP 数据'}
+        win = self._get_active_window()
+        if not win:
+            return {'success': False, 'message': '窗口未初始化'}
+        safe_default = self._sanitize_filename(default_name, 'icons.zip')
+        result = win.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename=safe_default,
+            file_types=('ZIP Archive (*.zip)',)
+        )
+        if not result:
+            return {'success': False, 'message': '未选择保存位置'}
+        dst = result[0] if isinstance(result, (list, tuple)) else result
+        if not dst:
+            return {'success': False, 'message': '未选择保存位置'}
+        if not dst.lower().endswith('.zip'):
+            dst += '.zip'
+        try:
+            if ',' in base64_data:
+                base64_data = base64_data.split(',', 1)[1]
+            data = base64.b64decode(base64_data)
+            with open(dst, 'wb') as fp:
+                fp.write(data)
+            return {'success': True, 'path': dst}
         except Exception as e:
             return {'success': False, 'message': f'保存失败: {str(e)}'}
 
     def save_ico(self, file_path, ico_files):
-        """保存ICO文件到指定位置"""
+        """保存后端已生成的图标文件到指定目录"""
         try:
+            used_names = set()
             for ico_file in ico_files:
                 src_path = ico_file['path']
-                dst_path = os.path.join(file_path, ico_file['name'])
+                raw_name = self._sanitize_filename(ico_file.get('name', os.path.basename(src_path)))
+                stem, ext = os.path.splitext(raw_name)
+                unique_name = self._get_unique_filename(stem, ext or '.ico', used_names)
+                dst_path = self._safe_join(file_path, unique_name)
                 shutil.copy2(src_path, dst_path)
-            return {'success': True}
+            return {'success': True, 'path': file_path}
         except Exception as e:
             return {'success': False, 'message': f'保存失败: {str(e)}'}
 
     def package_zip(self, ico_files, save_path=None):
-        """打包ICO文件为ZIP，可选保存到指定路径"""
+        """打包图标文件为 ZIP，可选保存到指定目录"""
         try:
             if save_path:
-                # 保存到指定路径
-                zip_path = os.path.join(save_path, 'icons.zip')
+                zip_path = self._safe_join(save_path, 'icons.zip')
             else:
-                # 保存到临时目录
-                zip_path = os.path.join(self.temp_dir, 'icons.zip')
+                zip_path = self._safe_join(self.temp_dir, 'icons.zip')
 
+            used_names = set()
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for ico_file in ico_files:
-                    zf.write(ico_file['path'], ico_file['name'])
+                    raw_name = self._sanitize_filename(ico_file.get('name', 'icon.ico'))
+                    stem, ext = os.path.splitext(raw_name)
+                    arcname = self._get_unique_filename(stem, ext or '.ico', used_names)
+                    zf.write(ico_file['path'], arcname)
             return {'success': True, 'path': zip_path}
         except Exception as e:
             return {'success': False, 'message': f'打包失败: {str(e)}'}
 
     def select_save_folder(self):
         """选择保存文件夹"""
-        result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        win = self._get_active_window()
+        if not win:
+            return {'success': False, 'message': '窗口未初始化'}
+        result = win.create_file_dialog(webview.FOLDER_DIALOG)
         if result and len(result) > 0:
             return {'success': True, 'path': result[0]}
         return {'success': False, 'message': '未选择文件夹'}
@@ -368,8 +551,9 @@ class Api:
     def cleanup(self):
         """清理临时文件"""
         try:
-            shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except:
+            if os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+        except Exception:
             pass
 
     def get_os_type(self):
@@ -379,15 +563,10 @@ class Api:
             return 'win32'
         elif system == 'darwin':
             return 'darwin'
-        else:
-            return 'linux'
+        return 'linux'
 
     def _create_icns(self, icon_images, output_path):
         """构建 ICNS 格式图标文件"""
-        # ICNS 格式: header(8B) + icon entry(8B + PNG数据) * N
-        # header: magic 'icns' + total file size (big-endian uint32)
-
-        # 尺寸到 ICNS 类型码映射
         size_to_type = {
             16: b'icp4',
             32: b'icp5',
@@ -402,24 +581,24 @@ class Api:
         data_entries = []
 
         for img in icon_images:
-            size = img.width  # 假设是正方形
-            icon_type = size_to_type.get(size, b'ic08')
+            size = img.width
+            icon_type = size_to_type.get(size)
+            if not icon_type:
+                continue
 
-            # 将图像保存为 PNG
             buf = BytesIO()
-            # 确保是 RGBA 模式
-            if img.mode != 'RGBA':
+            if img.mode not in ('RGB', 'RGBA'):
                 png_img = img.convert('RGBA')
+                png_img.save(buf, format='PNG')
+                png_img.close()
             else:
-                png_img = img
-            png_img.save(buf, format='PNG')
+                img.save(buf, format='PNG')
             png_data = buf.getvalue()
 
             entry_header = icon_type + struct.pack('>I', 8 + len(png_data))
             entries.extend(entry_header)
             data_entries.append(png_data)
 
-        # 构建完整 ICNS 文件
         total_size = 8 + len(entries) + sum(len(d) for d in data_entries)
         icns_data = bytearray()
         icns_data.extend(b'icns')
@@ -432,36 +611,39 @@ class Api:
             f.write(icns_data)
 
     def generate_icns(self, sizes, color_mode='rgba', resize_mode='cover'):
-        """生成 ICNS 文件"""
+        """批量生成 ICNS 文件"""
         if not self.uploaded_images:
             return {'success': False, 'message': '请先添加图片'}
 
         try:
-            size_list = [int(s) for s in sizes if s and int(s) in (16, 32, 64, 128, 256, 512, 1024)]
+            size_list = self._parse_sizes(sizes, valid_set=set(ICNS_SUPPORTED_SIZES))
             if not size_list:
                 return {'success': False, 'message': 'ICNS 格式仅支持 16, 32, 64, 128, 256, 512, 1024 尺寸'}
 
             results = []
+            used_names = set()
             for img_info in self.uploaded_images:
-                img = None
                 icon_images = []
                 try:
                     with Image.open(img_info['path']) as img:
-                        if img.mode != 'RGBA':
-                            img = img.convert('RGBA')
-
-                        for size in sorted(size_list, reverse=True):
+                        for size in size_list:
                             resized = self._resize_image(img, size, resize_mode, color_mode)
                             icon_images.append(resized)
 
-                        output_name = os.path.splitext(img_info['name'])[0] + '.icns'
-                        output_path = os.path.join(self.temp_dir, output_name)
+                        stem = os.path.splitext(img_info['name'])[0]
+                        output_name = self._get_unique_filename(stem, '.icns', used_names)
+                        output_path = self._safe_join(self.temp_dir, output_name)
                         self._create_icns(icon_images, output_path)
+
+                        with open(output_path, 'rb') as fp:
+                            b64_data = base64.b64encode(fp.read()).decode('ascii')
 
                         results.append({
                             'name': output_name,
                             'path': output_path,
-                            'sizes': sorted(size_list, reverse=True)
+                            'sizes': size_list,
+                            'format': 'icns',
+                            'base64': b64_data
                         })
                 finally:
                     for icon_img in icon_images:
@@ -469,29 +651,32 @@ class Api:
 
             return {'success': True, 'files': results}
         except Exception as e:
-            import traceback
             return {'success': False, 'message': f'生成失败: {str(e)}\n{traceback.format_exc()}'}
 
 
 def get_center_position(width, height):
-    """计算窗口居中位置（跨平台）"""
-    import platform
+    """计算窗口居中位置（跨平台，兼容 Windows High-DPI 缩放）"""
     system = platform.system()
     try:
         if system == 'Windows':
             import ctypes
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            except Exception:
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
             user32 = ctypes.windll.user32
             screen_width = user32.GetSystemMetrics(0)
             screen_height = user32.GetSystemMetrics(1)
         elif system == 'Darwin':
-            # macOS: 使用 AppKit 获取屏幕尺寸，避免 tkinter NSApplication 冲突
             try:
                 from AppKit import NSScreen
                 frame = NSScreen.mainScreen().frame()
                 screen_width = int(frame.size.width)
                 screen_height = int(frame.size.height)
             except ImportError:
-                # 兜底：使用 tkinter（需确保打包时包含 tkinter）
                 import tkinter as tk
                 root = tk.Tk()
                 root.withdraw()
@@ -499,7 +684,6 @@ def get_center_position(width, height):
                 screen_height = root.winfo_screenheight()
                 root.destroy()
         else:
-            # Linux 及其他平台
             import tkinter as tk
             root = tk.Tk()
             root.withdraw()
@@ -507,30 +691,29 @@ def get_center_position(width, height):
             screen_height = root.winfo_screenheight()
             root.destroy()
 
-        x = (screen_width - width) // 2
-        y = (screen_height - height) // 2
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
         return x, y
-    except:
-        # 如果失败，返回默认位置
+    except Exception:
         return 100, 100
 
 
 def main():
+    if webview is None:
+        raise RuntimeError('未安装 pywebview，请先运行: pip install -r requirements.txt')
+
     api = Api()
 
-    # 获取HTML文件路径（支持 PyInstaller 打包后的资源路径）
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         base_path = sys._MEIPASS
     else:
         base_path = os.path.dirname(os.path.abspath(__file__))
     html_path = os.path.join(base_path, 'web', 'index.html')
 
-    # 计算居中位置
     window_width = 1200
     window_height = 800
     x, y = get_center_position(window_width, window_height)
 
-    # 创建窗口（无边框模式）
     window = webview.create_window(
         'ICO 生成器',
         html_path,
@@ -545,10 +728,7 @@ def main():
     )
     api.set_window(window)
 
-    # 启动应用
     webview.start(debug=False)
-
-    # 清理临时文件
     api.cleanup()
 
 

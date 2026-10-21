@@ -3,38 +3,36 @@
 ## Commands
 
 ```bash
-pip install -r requirements.txt   # dependencies: pywebview>=4.4, Pillow>=10.0.0
-python main.py                    # run desktop app
-python -m PyInstaller --clean icon_generator.spec   # build EXE
-build.ps1                         # same as above (PowerShell wrapper)
+pip install -r requirements.txt                       # dependencies: pywebview>=4.4, Pillow>=10.0.0
+python main.py                                        # run desktop app
+python -m unittest discover -s tests                  # run automated unit tests
+python -m PyInstaller --clean icon_generator.spec     # build EXE / macOS .app
+./build.ps1                                           # PowerShell build wrapper (includes --clean)
 ```
-
-No lint, typecheck, or test commands exist.
 
 ## Architecture
 
-- **Entrypoint**: `main.py` launches a pywebview frameless window loading `web/index.html`
-- **Frontend**: `web/` directory is canonical source. Root-level `index.html`, `app.js`, `style.css` are **stale duplicates** — edit `web/` files only
-- **Dual-mode**: pywebview calls Python `Api` class methods (ICO generation via Pillow on backend). Standalone browser mode (without pywebview) uses client-side canvas+BMP for ICO generation
-- **Specfile**: `icon_generator.spec` has extensive exclusions (PyQt, numpy, requests, tkinter, etc.) to minimize bundle size. Always use `--clean` when rebuilding
-- **Python `generate_ico`**: resizes source images with `Image.Resampling.LANCZOS`, embeds BMP-format image data into ICO container via manual struct packing
+- **Entrypoint**: `main.py` launches a `pywebview` frameless window loading `web/index.html`.
+- **Frontend**: `web/` directory (`web/index.html`, `web/style.css`, `web/app.js`) is the single canonical source.
+- **Dual-mode**:
+  - **Desktop (`pywebview`)**: Uses Python `Api` class methods (`select_images`, `select_folder`, `add_base64_images`, `generate_ico`, `generate_icns`, `save_ico`, `package_zip`, `save_ico_from_base64`, `save_zip_from_base64`) backed by Pillow `Image.Resampling.LANCZOS`.
+  - **Standalone Browser**: Automatically falls back to HTML5 `<input type="file">`, Canvas high-quality scaling, client-side ICO/ICNS binary builders, and `Blob` downloads.
+- **Specfile**: `icon_generator.spec` excludes unused heavy packages (`PyQt`, `numpy`, `requests`, etc.) to minimize bundle size. Always pass `--clean` when rebuilding.
+- **Binary Formats**:
+  - **ICO**: Sizes `<= 256px` use BMP (DIB) format with BGRA/BGR XOR mask + 1-bit AND mask; sizes `> 256px` (`512, 768, 1024`) use embedded PNG streams per Windows Vista+ specification.
+  - **ICNS**: Uses standard Apple OSType PNG chunks (`icp4`, `icp5`, `icp6`, `ic07`, `ic08`, `ic09`, `ic10`).
 
 ## File Layout
 
 ```
 main.py                 # Python backend + pywebview Api class
-web/                    # frontend source (HTML/CSS/JS)
+web/                    # Frontend source (HTML/CSS/JS)
   index.html
   style.css
   app.js
+tests/                  # Automated unit tests
+  test_ico_generator.py
 icon_generator.spec     # PyInstaller config
-build.ps1               # build script
+build.ps1               # PowerShell build script
 requirements.txt        # pywebview, Pillow
 ```
-
-## Conventions
-
-- The `Api` class in `main.py` exposes JS-callable methods via `window.pywebview.api.*`
-- Frontend detects pywebview by checking `window.pywebview && window.pywebview.api`
-- All notifications are Chinese-localized
-- Generated ICO use manual BMP format (not PIL's ICO save) for Windows compatibility

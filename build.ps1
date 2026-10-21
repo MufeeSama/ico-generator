@@ -1,1 +1,1 @@
-python -m PyInstaller icon_generator.spec
+python -m PyInstaller --clean icon_generator.spec
